@@ -1,0 +1,81 @@
+# AGENTS.md
+
+Hackathon project: a Muse Spark agent infers a LEGO robot's kinematic chain from brick-level Studio data and generates FK/IK and EV3 control code. Full plan: `PLAN.md`. Detailed stage plans: `docs/stages/` (work only on the stage and task you are given).
+
+## Language
+
+- The user may write in Korean. Reply in Korean.
+- Write all code, comments, commit messages, docs and README in **English**.
+
+## Hard rules
+
+1. **New work only.** Do not copy code from any earlier project. Write everything fresh in this repo.
+2. **Never commit appearance or assembly data.** `.io`, `.ldr`, `.mpd`, renders and mesh-based MJCF live in `assets/private/` or `eval/ground_truth/` (git-ignored). Agent logs and tool outputs with part IDs/poses go to `runs/` (git-ignored). Only abstract kinematics (axes, link dimensions, gear ratios, coupling, limits), IK code/weights, primitive-geometry MJCF and generated EV3 code may be committed. See `PLAN.md` section 4a.
+3. **Never commit secrets.** API keys come from environment variables (`META_API_KEY`, `MODEL_API_KEY`). `.env` is git-ignored.
+4. **Ground truth stays out of the agent.** Files in `eval/ground_truth/` are for the verifier only. Never pass their contents (joint lists, gear ratios, link segmentation, link lengths) into agent prompts or tool outputs.
+5. **No Streamlit.** No dashboard as a main feature.
+6. Do not commit, push or amend unless asked.
+
+## Architecture
+
+```
+src/
+  parse/     .io / LDraw parser → parts with id, type, pose
+  catalog/   part catalog: part id → category, teeth, axle axis, motor type
+  tools/     deterministic tools exposed to the agent
+             get_parts, find_connections, check_gear_mesh, trace_axle,
+             rigid_groups, gear_graph, axle_carrier, solve_transmission,
+             axes_intersect
+  agent/     Muse Spark agent loop (tool calling, structured JSON output)
+  kin/       kinematic model → MJCF, FK, IK, motor-space conversion
+  verify/    compare with ground truth; MuJoCo end-effector error
+  codegen/   EV3 program generator → generated/<robot>/
+  ev3/       brick programs (master: Wi-Fi MQTT, slave: Bluetooth via master),
+             on-brick safety guards, host driver (ports only, protocol in docs/protocol.md)
+  viz/       Blender scene import and link/axis overlays (renders stay private)
+  demo/      O/X demos (physical + simulation)
+  vla/       demo generation + LeRobot conversion + Modal training (stretch)
+  gen/       procedural LDraw arm generator (generalization tests)
+models/              public primitive-geometry MJCF
+config/*.local.yaml  hardware, port wiring (motor/sensor uid → port, no joint names)
+                     and zero offsets (git-ignored, human-provided)
+eval/ground_truth/   ground-truth kinematics, segmentation, MJCF (verifier only)
+docs/schema.md       kinematic model JSON schema
+docs/stages/         stage plans and LOG.md
+```
+
+- Tools compute facts. The agent interprets them. Do not hard-code robot-specific answers in tools.
+- Kinematic model is the contract between stages. Keep `docs/schema.md` in sync. The schema holds abstract kinematics only, never part IDs or part poses.
+- VLA training scenes use the primitive-geometry MJCF only, never meshes.
+- Safety: on-brick guards (sensor, stall, heartbeat, Bluetooth link) must stay active for every motion. Never bypass or weaken them to make a test pass.
+- The agent may see `config/ports.local.yaml` (hardware layer). It must never see `eval/ground_truth/wiring_semantic.yaml` (which port drives which joint, sensor meanings).
+- IK takes an end-effector target pose and returns joint angles. Keep this interface stable.
+
+## Model API
+
+- Base URL `https://api.meta.ai/v1`, OpenAI SDK, Responses API.
+- Model: `muse-spark-1.3-contributor`. Do not switch to Standard or Muse Wonder without asking.
+- Contributor limit: 150 RPM. Use exponential backoff on 429.
+- Log `usage` (input, cached, output, reasoning tokens) for every agent call to `runs/usage.jsonl`.
+- Keep prompt prefixes stable (system prompt + tool definitions first, variable data last) for caching.
+
+## Cost and workflow discipline
+
+- Long jobs (data generation, training, batch evaluation) run as scripts, unattended. Do not poll or tail logs in the session; read a short summary when they finish.
+- Read files partially (`head`, `grep`). Do not dump large files, scenes or datasets into context.
+- Every generation or training run starts with a preflight check (joint limits, IK sanity, scene validity) and aborts on failure.
+- Run independent experiments in parallel.
+- Modal jobs must set a timeout.
+
+## Commands
+
+```bash
+python -m src.parse.ldr assets/private/model.ldr -o runs/<id>/parts.json  # parse
+python -m src.catalog.draft runs/<id>/parts.json -o src/catalog/parts.yaml  # catalog draft
+python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --ports config/ports.local.yaml  # wiring check
+python -m src.agent.run --model-file assets/private/<robot>.io   # run inference
+python -m src.verify.run --pred runs/<id>/kinematics.json         # verify
+python -m src.ev3.check                                           # EV3 connectivity
+```
+
+Update this section when commands change.

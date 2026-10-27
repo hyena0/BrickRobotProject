@@ -1,0 +1,7 @@
+0 Fixture: gear train with idler (8T - 16T - 24T)
+0 Name: train
+0 STEP
+1 0 0 0 0 1 0 0 0 1 0 0 0 1 gear8t.dat
+1 0 30 0 0 1 0 0 0 1 0 0 0 1 gear16t.dat
+1 0 30 50 0 1 0 0 0 1 0 0 0 1 gear24t.dat
+0 STEP

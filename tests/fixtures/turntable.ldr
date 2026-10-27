@@ -1,0 +1,6 @@
+0 Fixture: turntable joint (free rotation about Z)
+0 Name: turntable
+0 STEP
+1 0 0 0 0 1 0 0 0 1 0 0 0 1 turnbase.dat
+1 0 0 -8 0 1 0 0 0 1 0 0 0 1 turntop.dat
+0 STEP

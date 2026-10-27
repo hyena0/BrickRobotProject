@@ -1,0 +1,6 @@
+0 Fixture: two meshing spur gears, 8T + 24T
+0 Name: gears
+0 STEP
+1 0 0 0 0 1 0 0 0 1 0 0 0 1 gear8t.dat
+1 0 40 0 0 1 0 0 0 1 0 0 0 1 gear24t.dat
+0 STEP

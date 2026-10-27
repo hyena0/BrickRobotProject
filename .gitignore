@@ -1,0 +1,21 @@
+# Secrets and local config
+.env
+config/*.local.yaml
+
+# Private robot appearance / assembly data (see PLAN.md section 4a)
+assets/private/
+eval/ground_truth/
+runs/
+3D models/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,18 @@
+# Human-provided hardware config (git-ignored). Copy to hardware.local.yaml.
+broker: "192.168.1.10"
+broker_port: 1883
+left:   # master brick wiring (ports only, no joint names)
+  motors:
+    - {port: "outA", type: "large"}
+    - {port: "outB", type: "large"}
+    - {port: "outC", type: "medium"}
+  sensors:
+    - {port: "in1", type: "touch"}
+master_bt_addr: "00:16:53:AA:BB:CC"  # Bluetooth address of the master (slave uses this)
+right:  # slave brick wiring (ports only)
+  motors:
+    - {port: "outA", type: "medium"}
+    - {port: "outB", type: "medium"}
+    - {port: "outC", type: "medium"}
+  sensors:
+    - {port: "in1", type: "touch"}

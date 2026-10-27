@@ -1,0 +1,760 @@
+# Part catalog (Stage 1.2). One entry per part type in the model.
+# `review: true` means a human has NOT yet confirmed this entry.
+# Fields: category, teeth, gear_kind, axis_local, holes, axle_length, motor.
+
+"10197.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"10928.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"11214.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"11477.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"11478.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"14720.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"15100.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"15462.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"18651.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"18654.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"18677.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"18938.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"18939.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"22961.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"23948.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"24121.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"24316.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"26287.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"2780.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3020.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3022.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32013.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32017.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32034.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32054.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32062.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32072.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32073.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32123a.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32140.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32184.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32187.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32192.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32269.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32270.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32278.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32316.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32449.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32523.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32524.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32525.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"32526.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3648b.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3705.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3706.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"3713.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"39793.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"40490.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"41239.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"41677.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"42003.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"4274.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"43093.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"44294.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"44809.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"4519.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"46372.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"48168.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"48452.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"48496.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"59443.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"60483.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"60484.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"60485.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"62462.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"63869.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"64178.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"64179.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"64782.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"6536.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"6558.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"6573.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"6589.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"6632.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"87082.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"87083.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"87408.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"94925.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"95646.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"95648.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"95650.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"95658.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"99455.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true
+"99773.dat":
+  category: other  # gear|axle|pin|beam|frame|... 
+  teeth: null
+  gear_kind: null
+  axis_local: null  # e.g. [0, 0, 1]
+  holes: []
+  axle_length: null  # studs, for axles
+  motor: null  # large|medium
+  review: true

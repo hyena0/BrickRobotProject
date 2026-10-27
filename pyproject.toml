@@ -1,0 +1,17 @@
+[project]
+name = "brick-robot"
+version = "0.1.0"
+description = "Infer LEGO robot kinematics from brick-level data; generate FK/IK and EV3 control code."
+requires-python = ">=3.11"
+dependencies = [
+    "openai",
+    "numpy",
+    "scipy",
+    "mujoco",
+    "pyyaml",
+    "paho-mqtt",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

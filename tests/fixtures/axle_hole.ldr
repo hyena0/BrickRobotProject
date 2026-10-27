@@ -1,0 +1,6 @@
+0 Fixture: axle through a round hole (free rotation)
+0 Name: axle_hole
+0 STEP
+1 0 0 0 0 1 0 0 0 1 0 0 0 1 axle4.dat
+1 0 0 -20 0 1 0 0 0 1 0 0 0 1 beamhole.dat
+0 STEP
