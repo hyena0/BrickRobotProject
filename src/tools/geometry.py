@@ -41,12 +41,22 @@ def _rot(part: dict) -> np.ndarray:
     return np.asarray(part["rotation"], dtype=float)
 
 
+def _conv_dir(local) -> np.ndarray:
+    """LDraw-frame direction vector into the converted local frame."""
+    v = np.asarray(local, dtype=float)
+    return np.array([v[0], v[2], -v[1]])
+
+
 def axis_world(part: dict, catalog: dict) -> np.ndarray | None:
-    """Rotation/insertion axis of a part in world frame, or None."""
+    """Rotation/insertion axis of a part in world frame, or None.
+
+    Stored rotations are true world rotations, so local LDraw-frame
+    axes convert with the same point remap as positions.
+    """
     axis = _entry(catalog, part["part_id"]).get("axis_local")
     if axis is None:
         return None
-    return _rot(part) @ np.asarray(axis, dtype=float)
+    return _rot(part) @ _conv_dir(axis)
 
 
 def _angle_deg(a: np.ndarray, b: np.ndarray) -> float:
@@ -77,27 +87,101 @@ def get_parts(parts: list[dict], catalog: dict, category: str | None = None,
     return out
 
 
-def _classify_axle_fit(other: dict, catalog: dict) -> str:
+def hole_world(part: dict, hole: dict) -> np.ndarray:
+    """Centre of a catalog hole in world frame (mm).
+
+    Catalog positions are part-local LDraw LDU; they get the same
+    axis remap as parser points, then the part rotation/translation.
+    """
+    local = np.asarray(hole.get("pos") or [0, 0, 0], dtype=float)
+    conv = _conv_dir(local) * LDU_TO_MM
+    return _pos(part) + _rot(part) @ conv
+
+
+def _classify_axle_fit(other: dict, catalog: dict,
+                       line_point: np.ndarray | None = None,
+                       line_dir: np.ndarray | None = None) -> str:
     holes = _entry(catalog, other["part_id"]).get("holes") or []
-    kinds = {h.get("kind") for h in holes if isinstance(h, dict)}
+    holes = [h for h in holes if isinstance(h, dict)]
+    if _entry(catalog, other["part_id"]).get("category") == "bush":
+        return "axle_in_axle_hole"  # bush clamps the axle
+    if line_point is not None and line_dir is not None and holes:
+        # Position-aware: the hole the line actually passes through
+        # decides. Nearest hole centre within tolerance wins.
+        best = None
+        for hole in holes:
+            rel = hole_world(other, hole) - line_point
+            lateral = rel - float(np.dot(rel, line_dir)) * line_dir
+            dist = float(np.linalg.norm(lateral))
+            if best is None or dist < best[0]:
+                best = (dist, hole.get("kind"))
+        if best is not None and best[0] <= AXLE_LINE_TOL_MM:
+            return ("axle_in_axle_hole" if best[1] == "axle"
+                    else "axle_in_round_hole")
+    kinds = {h.get("kind") for h in holes}
     if "axle" in kinds:
         return "axle_in_axle_hole"  # locks rotation
     return "axle_in_round_hole"  # free rotation
+
+
+def _pin_span_mm(part: dict, catalog: dict) -> float:
+    """Half-length of a pin's joining segment in mm."""
+    entry = _entry(catalog, part["part_id"])
+    studs = entry.get("pin_length_studs") or 3
+    return float(studs) * 8.0 / 2.0 + 2.0
+
+
+def _line_points(other: dict, catalog: dict) -> list[np.ndarray]:
+    """Test points of a part: its centre plus its catalog hole centres."""
+    pts = [_pos(other)]
+    for hole in _entry(catalog, other["part_id"]).get("holes") or []:
+        if isinstance(hole, dict):
+            pts.append(hole_world(other, hole))
+    return pts
+
+
+def _line_hits(me: dict, my_axis: np.ndarray, other: dict,
+               catalog: dict, span_mm: float | None) -> bool:
+    """Whether `other` meets the line (centre or hole, within span)."""
+    axis = my_axis / np.linalg.norm(my_axis)
+    origin = _pos(me)
+    for pt in _line_points(other, catalog):
+        rel = pt - origin
+        along = float(np.dot(rel, axis))
+        if span_mm is not None and abs(along) > span_mm:
+            continue
+        lateral = rel - along * axis
+        if float(np.linalg.norm(lateral)) <= AXLE_LINE_TOL_MM:
+            return True
+    return False
+
+
+def _axle_span_mm(part: dict, catalog: dict) -> float:
+    """Half-length of an axle in mm (infinite when unknown)."""
+    studs = _entry(catalog, part["part_id"]).get("axle_length")
+    if not studs:
+        return float("inf")
+    return float(studs) * 8.0 / 2.0 + 3.0
 
 
 def find_connections(uid: str, parts: list[dict],
                      catalog: dict) -> list[dict]:
     """Neighbour parts of `uid` with a connection type.
 
-    Tier 1 (catalog-driven): an `axle` part defines an axle line; parts
-    whose centre lies on that line are axle-hole connections, classified
-    by the catalog hole kind. Tier 2 (fallback): centre distance below
+    Line tiers (catalog-driven): `axle` parts define infinite axle
+    lines, classified position-aware by the hole the line pierces
+    (axle bore locks rotation, round bore is free). `pin` parts
+    define segments of pin length: a friction pin locks everything
+    it pierces (`pin_friction`, rigid), a frictionless pin stays free.
+    `motor` parts define shaft lines (transmission, never rigid to
+    the motor body). Tier 2 (fallback): centre distance below
     CONTACT_MM reports `contact`.
     """
     by_uid = {p["uid"]: p for p in parts}
     me = by_uid[uid]
     my_axis = axis_world(me, catalog)
-    my_cat = _entry(catalog, me["part_id"]).get("category")
+    my_entry = _entry(catalog, me["part_id"])
+    my_cat = my_entry.get("category")
     out = []
     for other in parts:
         if other["uid"] == uid:
@@ -106,17 +190,36 @@ def find_connections(uid: str, parts: list[dict],
         dist = float(np.linalg.norm(rel))
         conn = None
         if my_cat == "axle" and my_axis is not None:
-            lateral = rel - float(np.dot(rel, my_axis)) * my_axis
-            if float(np.linalg.norm(lateral)) <= AXLE_LINE_TOL_MM:
-                conn = _classify_axle_fit(other, catalog)
+            if _line_hits(me, my_axis, other, catalog,
+                           _axle_span_mm(me, catalog)):
+                conn = _classify_axle_fit(other, catalog,
+                                          _pos(me), my_axis)
+        if conn is None and my_cat == "pin" and my_axis is not None:
+            if _line_hits(me, my_axis, other, catalog,
+                           _pin_span_mm(me, catalog)):
+                conn = ("pin_friction" if my_entry.get("friction", True)
+                        else "pin_frictionless")
+        if conn is None and my_cat == "motor" and my_axis is not None:
+            if _line_hits(me, my_axis, other, catalog, 60.0):
+                conn = "motor_shaft"  # transmission, free vs body
         if conn is None:
             other_axis = axis_world(other, catalog)
-            other_cat = _entry(catalog, other["part_id"]).get("category")
+            other_entry = _entry(catalog, other["part_id"])
+            other_cat = other_entry.get("category")
             if other_cat == "axle" and other_axis is not None:
-                rel2 = _pos(me) - _pos(other)
-                lateral = rel2 - float(np.dot(rel2, other_axis)) * other_axis
-                if float(np.linalg.norm(lateral)) <= AXLE_LINE_TOL_MM:
-                    conn = _classify_axle_fit(me, catalog)
+                if _line_hits(other, other_axis, me, catalog,
+                               _axle_span_mm(other, catalog)):
+                    conn = _classify_axle_fit(me, catalog,
+                                              _pos(other), other_axis)
+            elif other_cat == "pin" and other_axis is not None:
+                if _line_hits(other, other_axis, me, catalog,
+                               _pin_span_mm(other, catalog)):
+                    conn = ("pin_friction"
+                            if other_entry.get("friction", True)
+                            else "pin_frictionless")
+            elif other_cat == "motor" and other_axis is not None:
+                if _line_hits(other, other_axis, me, catalog, 60.0):
+                    conn = "motor_shaft"
         if conn is None and my_axis is not None:
             other_axis = axis_world(other, catalog)
             other_cat = _entry(catalog, other["part_id"]).get("category")
@@ -205,11 +308,16 @@ def trace_axle(uid: str, parts: list[dict], catalog: dict) -> list[dict]:
     origin = _pos(me)
     traced = []
     for other in parts:
-        rel = _pos(other) - origin
-        lateral = rel - float(np.dot(rel, axis)) * axis
-        if float(np.linalg.norm(lateral)) > AXLE_LINE_TOL_MM:
+        # A part is on the line when its centre or one of its holes is;
+        # ordering uses the centre (stable for symmetric parts).
+        on_line = any(
+            float(np.linalg.norm(
+                (pt - origin) - float(np.dot(pt - origin, axis)) * axis))
+            <= AXLE_LINE_TOL_MM
+            for pt in _line_points(other, catalog))
+        if not on_line:
             continue
-        along = round(float(np.dot(rel, axis)), 3)
+        along = round(float(np.dot(_pos(other) - origin, axis)), 3)
         if other["uid"] == uid:
             conn = "self"
         else:

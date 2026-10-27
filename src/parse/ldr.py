@@ -22,11 +22,16 @@ def _convert_point(x: float, y: float, z: float) -> list[float]:
 
 
 def _convert_matrix(a: list[float]) -> list[list[float]]:
-    # Rows (a..i) of the LDraw 3x3 get the same axis remap as points:
-    # row (r0, r1, r2) -> (r0, r2, -r1).
+    # True world rotation R = C @ L @ C^-1 with C the point remap
+    # (x, y, z) -> (x, z, -y). With remap(r) = (r0, r2, -r1):
+    # R rows are remap(L row 0), remap(L row 2), -remap(L row 1).
+    # A row-only remap (R = L @ S) is wrong for rotated parts: it
+    # maps converted-local vectors back into the LDraw frame.
     it = iter(a)
     rows = [[next(it), next(it), next(it)] for _ in range(3)]
-    return [[r[0], r[2], -r[1]] for r in rows]
+    remapped = [[r[0], r[2], -r[1]] for r in rows]
+    return [remapped[0], remapped[2],
+            [-v for v in remapped[1]]]
 
 
 def parse_type1(line: str, uid: str) -> dict | None:

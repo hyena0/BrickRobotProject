@@ -1,760 +1,2936 @@
-# Part catalog (Stage 1.2). One entry per part type in the model.
-# `review: true` means a human has NOT yet confirmed this entry.
-# Fields: category, teeth, gear_kind, axis_local, holes, axle_length, motor.
-
-"10197.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
+# Part catalog (reviewed where evidence agrees).
+# `review: true` still needs a human check against the LDraw part.
+# `evidence` records how each entry was derived.
+# `holes[].pos` is in the part-local LDraw frame (LDU).
+10197.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Hub with 2 Perpendicular Axles;
+    structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+10928.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 8 Tooth with Dual Face; 8T spur; axis from 8 tooth
+    placements; source library'
+  gear_kind: spur
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  motor: null
+  review: false
+  teeth: 8
+11214.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 1
+  category: axle
+  evidence: 'title: Technic, Axle  1L with Pin 2L with Friction Ridges; axle 1L; axis
+    from symmetric sub-primitive agreement; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+11477.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Slope, Curved 2 x 1 x 2/3; plate/slope, stud-joined (tool limitation);
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+11478.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thin 1 x 5 - Axle Holes; structural, holes from
+    geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - -40.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - -30.0
+  motor: null
+  review: false
+  teeth: null
+14720.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified H-Shape Thick 3 x 5 Perpendicular;
+    structural, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  motor: null
+  review: false
+  teeth: null
+15100.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin with Friction Ridges and Pin Hole; Technic pin family,
+    3L envelope; friction; span checked in --verify; source library'
+  friction: true
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  pin_length_studs: 3
+  review: false
+  teeth: null
+15462.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 5
+  category: axle
+  evidence: 'title: Technic, Axle  5L with Stop; axle 5L; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+18651.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 2
+  category: axle
+  evidence: 'title: Technic, Axle  2L with Pin with Friction Ridges; axle 2L; axis
+    from symmetric sub-primitive agreement; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+18654.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Liftarm Thick 1 x 1 (Spacer); bush/spacer bore; source
+    library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+18677.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Plate, Modified 1 x 2 with Pin Hole on Bottom; plate/slope, stud-joined
+    (tool limitation); source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+18938.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: turntable
+  evidence: 'title: Technic Turntable 60 Tooth Top; turntable ring gear; turntable
+    axis verified by assembly coaxiality; source override(LDraw.org)'
+  gear_kind: turntable
+  holes: []
+  motor: null
+  review: false
+  teeth: 60
+18939.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: turntable
+  evidence: 'title: Technic Turntable 60 Tooth, Base; turntable ring gear; turntable
+    axis verified by assembly coaxiality; source library'
+  gear_kind: turntable
+  holes:
+  - kind: round
+    pos:
+    - 40.0
+    - 20.0
+    - 0.0
+  - kind: round
+    pos:
+    - -40.0
+    - 20.0
+    - 0.0
+  - kind: round
+    pos:
+    - 40.0
+    - 20.0
+    - 20.0
+  - kind: round
+    pos:
+    - -40.0
+    - 20.0
+    - 20.0
+  - kind: round
+    pos:
+    - 40.0
+    - 20.0
+    - -20.0
+  - kind: round
+    pos:
+    - -40.0
+    - 20.0
+    - -20.0
+  motor: null
+  review: false
+  teeth: 60
+22961.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Hub with 1L Axle; structural connector,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+23948.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 11
+  category: axle
+  evidence: 'title: Technic, Axle 11L; axle 11L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+24121.dat:
+  axis_local: null
+  axle_length: null
+  category: rack
+  evidence: 'title: Technic, Gear Rack 11 x 11 Curved; curved rack, teeth counted
+    in Stage 3; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+24316.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 3
+  category: axle
+  evidence: 'title: Technic, Axle  3L with Stop; axle 3L; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+26287.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle Connector 3L; structural connector, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 30.0
+  motor: null
+  review: false
+  teeth: null
+2780.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin with Short Friction Ridges; Technic pin family, 3L
+    envelope; friction; span checked in --verify; axis from symmetric sub-primitive
+    agreement; source library'
+  friction: true
+  gear_kind: null
+  holes: []
+  motor: null
+  pin_length_studs: 3
+  review: false
+  teeth: null
+3020.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Plate 2 x 4; plate/slope, stud-joined (tool limitation); source
+    library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+3022.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Plate 2 x 2; plate/slope, stud-joined (tool limitation); source
+    library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+32013.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Angled #1; structural connector,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  motor: null
+  review: false
+  teeth: null
+32017.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thin 1 x 5; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - -40.0
+  motor: null
+  review: false
+  teeth: null
+32034.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Angled #2 - 180 degrees; structural
+    connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 29.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 29.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  motor: null
+  review: false
+  teeth: null
+32054.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin 3L with Friction Ridges and Stop Bush; Technic pin
+    family, 3L envelope; friction; span checked in --verify; source library'
+  friction: true
+  gear_kind: null
+  holes: []
+  motor: null
+  pin_length_studs: 3
+  review: false
+  teeth: null
+32062.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 2
+  category: axle
+  evidence: 'title: Technic, Axle  2L Notched; axle 2L; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - -8.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 11.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - -11.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - -8.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 8.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 11.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 20.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 20.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+32072.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear Knob Cog Wheel with Axle Hole (+ Orientation); knob
+    wheel, 4-lobe guess; axis from axle-bore direction; source library'
+  gear_kind: knob
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  motor: null
+  review: true
+  teeth: 4
+32073.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 5
+  category: axle
+  evidence: 'title: Technic, Axle  5L; axle 5L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+32123a.dat:
+  axis_local: null
+  axle_length: null
+  category: bush
+  evidence: 'title: Technic Bush 1/2 Smooth with Axle Hole Reduced; bush/spacer bore;
+    generic axle bore at origin; source override(LDraw.org)'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0
+    - 0
+    - 0
+  motor: null
+  review: true
+  teeth: null
+32140.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Bent Thick L-Shape 2 x 4; structural,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 10.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 10.0
+    - -10.0
+    - 60.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 20.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 20.0
+    - 10.0
+    - 60.0
+  motor: null
+  review: false
+  teeth: null
+32184.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Perpendicular 3L with Center Pin
+    Hole; structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  motor: null
+  review: false
+  teeth: null
+32187.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic Driving Ring Extension; clutch ring, teeth resolved in
+    Stage 3; axis from sleeve extent, unconfirmed; source library'
+  gear_kind: ring
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+32192.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Angled #4 - 135 degrees; structural
+    connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -20.51
+    - 20.51
+  - kind: axle
+    pos:
+    - 0.0
+    - -7.07
+    - 7.07
+  - kind: axle
+    pos:
+    - 0.0
+    - -20.51
+    - 20.51
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -29.0
+  motor: null
+  review: false
+  teeth: null
+32269.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 20 Tooth Double Bevel; 20T double-bevel; axis from
+    20 tooth placements; source library'
+  gear_kind: double-bevel
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  motor: null
+  review: false
+  teeth: 20
+32270.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 12 Tooth Double Bevel; 12T double-bevel; axis from
+    12 tooth placements; source library'
+  gear_kind: double-bevel
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  motor: null
+  review: false
+  teeth: 12
+32278.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 15; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 140.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 120.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -120.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -140.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -140.0
+  motor: null
+  review: false
+  teeth: null
+32316.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 5; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -40.0
+  motor: null
+  review: false
+  teeth: null
+32449.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thin 1 x 4 - Axle Holes; structural, holes from
+    geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - -20.0
+  motor: null
+  review: false
+  teeth: null
+32523.dat:
+  axis_local: null
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 3; structural, holes from geometry;
+    length axis unresolved (not needed for Stage 2); source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  motor: null
+  review: false
+  teeth: null
+32524.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 7; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  motor: null
+  review: false
+  teeth: null
+32525.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 11; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -100.0
+  motor: null
+  review: false
+  teeth: null
+32526.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Bent Thick L-Shape 3 x 5; structural,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 20.0
+    - -10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 20.0
+    - 10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 10.0
+    - -10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 10.0
+    - 10.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 70.0
+  motor: null
+  review: false
+  teeth: null
+3648b.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic Gear 24 Tooth with Single Axle Hole; 24T spur; axis by
+    spur-gear family convention; source override(LDraw.org)'
+  gear_kind: spur
+  holes: []
+  motor: null
+  review: true
+  teeth: 24
+3705.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 4
+  category: axle
+  evidence: 'title: Technic, Axle  4L; axle 4L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+3706.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 6
+  category: axle
+  evidence: 'title: Technic, Axle  6L; axle 6L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+3713.dat:
+  axis_local: null
+  axle_length: null
+  category: bush
+  evidence: 'title: Technic Bush; bush/spacer bore; generic axle bore at origin; source
+    library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0
+    - 0
+    - 0
+  motor: null
+  review: true
+  teeth: null
+39793.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Pin Connector Block, Liftarm 1 x 3 x 3; structural connector,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 10.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 10.0
+    - 10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - -10.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - -10.0
+    - 10.0
+    - 0.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - -20.0
+  motor: null
+  review: false
+  teeth: null
+40490.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 9; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  motor: null
+  review: false
+  teeth: null
+41239.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 13; structural, holes from geometry;
+    source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 120.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 120.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -120.0
+  motor: null
+  review: false
+  teeth: null
+41677.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thin 1 x 2 - Axle Holes; structural, holes from
+    geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 20.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+42003.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Perpendicular 3L with 2 Pin Holes;
+    structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 20.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+4274.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin 1/2 without Friction Ridges; Technic pin family,
+    0.5L envelope; frictionless; span checked in --verify; axis from symmetric sub-primitive
+    agreement; source library'
+  friction: false
+  gear_kind: null
+  holes: []
+  motor: null
+  pin_length_studs: 0.5
+  review: false
+  teeth: null
+43093.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 1
+  category: axle
+  evidence: 'title: Technic, Axle  1L with Pin with Friction Ridges; axle 1L; source
+    library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+44294.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 7
+  category: axle
+  evidence: 'title: Technic, Axle  7L; axle 7L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+44809.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Pin Connector Perpendicular 2 x 2 Bent; structural connector,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+4519.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 3
+  category: axle
+  evidence: 'title: Technic, Axle  3L; axle 3L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+46372.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 28 Tooth Double Bevel; 28T double-bevel; axis from
+    axle-bore direction; source library'
+  gear_kind: double-bevel
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 20.0
+    - 0.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -20.0
+    - 0.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: 28
+48168.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: turntable
+  evidence: 'title: Technic Turntable 56 Tooth, Top; turntable ring gear; turntable
+    axis verified by assembly coaxiality; source library'
+  gear_kind: turntable
+  holes:
+  - kind: round
+    pos:
+    - 50.0
+    - -40.0
+    - 20.0
+  - kind: round
+    pos:
+    - 50.0
+    - -40.0
+    - 0.0
+  - kind: round
+    pos:
+    - 50.0
+    - -40.0
+    - -20.0
+  - kind: round
+    pos:
+    - -50.0
+    - -40.0
+    - -20.0
+  - kind: round
+    pos:
+    - -50.0
+    - -40.0
+    - 0.0
+  - kind: round
+    pos:
+    - -50.0
+    - -40.0
+    - 20.0
+  motor: null
+  review: false
+  teeth: 56
+48452.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: turntable
+  evidence: 'title: Technic Turntable 56 Tooth, Base; turntable ring gear; turntable
+    axis verified by assembly coaxiality; source library'
+  gear_kind: turntable
+  holes:
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 20.0
+  motor: null
+  review: false
+  teeth: 56
+48496.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Pin Connector Toggle Joint Smooth Double with 2 Pins;
+    structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -30.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -30.0
+    - -30.0
+  motor: null
+  review: false
+  teeth: null
+59443.dat:
+  axis_local: null
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic Axle Joiner Inline Smooth; structural connector, holes
+    from geometry; length axis unresolved (not needed for Stage 2); generic axle bore
+    at origin; source override(LDraw.org)'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0
+    - 0
+    - 0
+  motor: null
+  review: true
+  teeth: null
+60483.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thick 1 x 2 - Axle Hole; structural, holes from
+    geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  motor: null
+  review: false
+  teeth: null
+60484.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified T-Shape Thick 3 x 3; structural, holes
+    from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 10.0
+    - -10.0
+    - 40.0
+  - kind: round
+    pos:
+    - 10.0
+    - 10.0
+    - 40.0
+  - kind: round
+    pos:
+    - -10.0
+    - -10.0
+    - 40.0
+  - kind: round
+    pos:
+    - -10.0
+    - 10.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 30.0
+  motor: null
+  review: false
+  teeth: null
+60485.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: 9
+  category: axle
+  evidence: 'title: Technic, Axle  9L; axle 9L; axis from single-primitive scale;
+    source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+62462.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Pin Connector Round 2L with Slot (Pin Joiner Round);
+    structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+63869.dat:
+  axis_local:
+  - 0
+  - 1
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Perpendicular Triple; structural
+    connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 10.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+64178.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Frame Thick 5 x 11 Open Center; structural,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 40.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 40.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - 40.0
+    - 10.0
+    - 20.0
+  - kind: round
+    pos:
+    - 40.0
+    - -10.0
+    - 20.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 90.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - -40.0
+    - 10.0
+    - 60.0
+  - kind: round
+    pos:
+    - -40.0
+    - -10.0
+    - 60.0
+  - kind: round
+    pos:
+    - -40.0
+    - 10.0
+    - 20.0
+  - kind: round
+    pos:
+    - -40.0
+    - -10.0
+    - 20.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 90.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 40.0
+    - 10.0
+    - -60.0
+  - kind: round
+    pos:
+    - 40.0
+    - -10.0
+    - -60.0
+  - kind: round
+    pos:
+    - 40.0
+    - 10.0
+    - -20.0
+  - kind: round
+    pos:
+    - 40.0
+    - -10.0
+    - -20.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -90.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -40.0
+    - 10.0
+    - -60.0
+  - kind: round
+    pos:
+    - -40.0
+    - -10.0
+    - -60.0
+  - kind: round
+    pos:
+    - -40.0
+    - 10.0
+    - -20.0
+  - kind: round
+    pos:
+    - -40.0
+    - -10.0
+    - -20.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -90.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+64179.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Frame Thick 5 x 7 Open Center; structural,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: null
+64782.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Technic, Panel Plate 5 x 11 x 1; plate/slope, stud-joined (tool
+    limitation); source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+6536.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Axle and Pin Connector Perpendicular; structural connector,
+    holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 20.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 20.0
+    - -10.0
+  motor: null
+  review: false
+  teeth: null
+6558.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin 3L with Friction Ridges; Technic pin family, 3L envelope;
+    friction; span checked in --verify; source library'
+  friction: true
+  gear_kind: null
+  holes: []
+  motor: null
+  pin_length_studs: 3
+  review: false
+  teeth: null
+6573.dat:
+  axis_local: null
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear Differential 24-16 Tooth; 24-16 differential, mixed
+    tooth orientations; ratios/axes in Stage 3; source library'
+  gear_kind: differential
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+6589.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 12 Tooth Bevel; 12T bevel; axis from axle-bore direction;
+    source library'
+  gear_kind: bevel
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  review: false
+  teeth: 12
+6632.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm Thin 1 x 3 - Axle Holes; structural, holes from
+    geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -5.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - 20.0
+  motor: null
+  review: false
+  teeth: null
+87082.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic, Pin 3L with Friction Ridges and Center Pin Hole; Technic
+    pin family, 3L envelope; friction; span checked in --verify; source library'
+  friction: true
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  motor: null
+  pin_length_studs: 3
+  review: false
+  teeth: null
+87083.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: 4
+  category: axle
+  evidence: 'title: Technic, Axle  4L with Stop; axle 4L; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+87408.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic, Pin Connector Toggle Joint Smooth Double with Axle and
+    Pin Holes; structural connector, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -30.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -50.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -40.0
+    - 30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -20.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -20.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -30.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -50.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -40.0
+    - -30.0
+  - kind: axle
+    pos:
+    - 0.0
+    - -20.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -20.0
+    - -10.0
+  motor: null
+  review: false
+  teeth: null
+94925.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic, Gear 16 Tooth - Axle Hole with Closed Sides; 16T spur;
+    axis from 16 tooth placements; source library'
+  gear_kind: spur
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
+  motor: null
+  review: false
+  teeth: 16
+95646.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Electric Mindstorms EV3; EV3 brick; source override(LDraw.org)'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+95648.dat:
+  axis_local: null
+  axle_length: null
+  category: sensor
+  evidence: 'title: Electric Sensor, Touch - EV3; EV3 sensor; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+95650.dat:
+  axis_local: null
+  axle_length: null
+  category: sensor
+  evidence: 'title: Electric Sensor, Color - EV3; EV3 sensor; source library'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: false
+  teeth: null
+95658.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: motor
+  evidence: 'title: Electric, Motor EV3, Large; EV3 large motor; shaft +Z from EV3
+    hub geometry (hub body of revolution about Z); source library'
+  gear_kind: null
+  holes: []
+  motor: large
+  review: false
+  teeth: null
+99455.dat:
+  axis_local:
+  - 0
+  - 0
+  - 1
+  axle_length: null
+  category: motor
+  evidence: 'title: Electric, Motor EV3, Medium; EV3 medium motor; shaft +Z from EV3
+    hub geometry (hub body of revolution about Z); source library'
+  gear_kind: null
+  holes: []
+  motor: medium
+  review: false
+  teeth: null
+99773.dat:
+  axis_local:
+  - 1
+  - 0
+  - 0
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Triangle Thin 3 x 5 with Short Supports;
+    structural, holes from geometry; source library'
+  gear_kind: null
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 0.0
+  - kind: round
+    pos:
+    - -20.0
+    - -5.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - 0.0
+  - kind: round
+    pos:
+    - -20.0
+    - 5.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - 20.0
+  - kind: axle
+    pos:
+    - -40.0
+    - -5.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - -5.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - 5.0
+    - 40.0
+  - kind: round
+    pos:
+    - 20.0
+    - -5.0
+    - 0.0
+  - kind: round
+    pos:
+    - 20.0
+    - 5.0
+    - 0.0
+  - kind: axle
+    pos:
+    - 40.0
+    - -5.0
+    - 0.0
+  motor: null
+  review: false
   teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"10928.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"11214.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"11477.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"11478.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"14720.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"15100.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"15462.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"18651.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"18654.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"18677.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"18938.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"18939.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"22961.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"23948.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"24121.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"24316.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"26287.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"2780.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3020.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3022.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32013.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32017.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32034.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32054.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32062.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32072.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32073.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32123a.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32140.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32184.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32187.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32192.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32269.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32270.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32278.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32316.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32449.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32523.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32524.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32525.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"32526.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3648b.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3705.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3706.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"3713.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"39793.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"40490.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"41239.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"41677.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"42003.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"4274.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"43093.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"44294.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"44809.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"4519.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"46372.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"48168.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"48452.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"48496.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"59443.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"60483.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"60484.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"60485.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"62462.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"63869.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"64178.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"64179.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"64782.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"6536.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"6558.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"6573.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"6589.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"6632.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"87082.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"87083.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"87408.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"94925.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"95646.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"95648.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"95650.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"95658.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"99455.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true
-"99773.dat":
-  category: other  # gear|axle|pin|beam|frame|... 
-  teeth: null
-  gear_kind: null
-  axis_local: null  # e.g. [0, 0, 1]
-  holes: []
-  axle_length: null  # studs, for axles
-  motor: null  # large|medium
-  review: true

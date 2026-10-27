@@ -73,8 +73,11 @@ docs/stages/         stage plans and LOG.md
 python -m src.parse.ldr assets/private/model.ldr -o runs/<id>/parts.json  # parse
 python -m src.catalog.draft runs/<id>/parts.json -o src/catalog/parts.yaml  # catalog draft
 python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --ports config/ports.local.yaml  # wiring check
-python -m src.agent.run --model-file assets/private/<robot>.io   # run inference
-python -m src.verify.run --pred runs/<id>/kinematics.json         # verify
+python -m src.agent.run --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --run-id <id> --heuristic  # stage-2 baseline
+python -m src.verify.segmentation --pred runs/<id>/links_joints.json --gt eval/ground_truth/segmentation.json  # link score
+python -m src.verify.joints --pred runs/<id>/links_joints_public.json --gt eval/ground_truth/kinematics_gt.json  # joint score
+python -m src.viz.overlay --pred runs/<id>/links_joints.json -o runs/<id>/overlay.json  # Blender overlay data
+python -m src.agent.sensors --parts runs/<id>/parts.json --links runs/<id>/links_joints.json --ports config/ports.local.yaml -o runs/<id>/sensors.json  # sensor-joint association
 python -m src.ev3.check                                           # EV3 connectivity
 ```
 

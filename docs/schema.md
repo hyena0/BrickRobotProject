@@ -11,9 +11,14 @@ Base link frame, Z up, millimetres, right-handed.
 
 Parser input is LDraw in LDU (1 LDU = 0.4 mm) with `-Y` up.
 Point `(x, y, z)` maps to `(0.4x, 0.4z, -0.4y)`.
-Each row of the 3x3 part rotation gets the same remap:
-row `(a, b, c)` becomes `(a, c, -b)`.
-The map is a proper rotation, so handedness is preserved.
+Stored rotations are true world rotations `R = C @ L @ C^-1`, where
+`C` is the point remap and `L` the LDraw matrix. With
+`remap(r) = (r0, r2, -r1)`, the stored rows are `remap(L row 0)`,
+`remap(L row 2)`, `-remap(L row 1)`. (A row-only remap would map
+converted-local vectors back into the LDraw frame for rotated
+parts.) Local direction `v` converts as `(vx, vz, -vy)` before the
+stored rotation is applied. The map is a proper rotation, so
+handedness is preserved.
 
 ## Model JSON
 
