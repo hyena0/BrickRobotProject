@@ -84,6 +84,97 @@ class Library:
             raw = zf.read("model2.ldr")
         return cls(raw.decode("utf-8-sig", errors="replace"))
 
+    @classmethod
+    def from_dir(cls, root: str, seeds: list[str],
+                 max_files: int = 6000) -> "Library":
+        """Load a Studio ldraw/ tree by transitive closure from seeds.
+
+        Only files reachable from `seeds` (part filenames as
+        referenced, e.g. "3648b.dat" or "s/11025s02.dat") are read,
+        so a 389MB parts/ tree stays a small working set. Each file
+        is registered under its referenced spelling plus a
+        slash-flipped alias; existing keys are never overwritten, so
+        embedded custom geometry keeps priority when merging.
+        """
+        import os
+
+        lib = cls("")
+        lib.lines = []
+        lib.blocks = {}
+
+        def candidates(name: str) -> list[str]:
+            low = name.lower().replace("\\", "/")
+            outs = []
+            if low.startswith("s/"):
+                base = low[2:]
+                outs += [os.path.join(root, "parts", "s", base),
+                         os.path.join(root, "UnOfficial", "parts", "s",
+                                       base)]
+            elif low.startswith("p/"):
+                base = low[2:]
+                outs += [os.path.join(root, "p", base),
+                         os.path.join(root, "UnOfficial", "p", base)]
+            else:
+                outs += [os.path.join(root, "parts", low),
+                         os.path.join(root, "UnOfficial", "parts", low),
+                         os.path.join(root, "p", low),
+                         os.path.join(root, "UnOfficial", "p", low)]
+            seen: list[str] = []
+            for c in outs:
+                if c not in seen:
+                    seen.append(c)
+            return seen
+
+        def register(spelling: str, text: str) -> None:
+            start = len(lib.lines)
+            lib.lines.append("0 FILE " + spelling)
+            # UnOfficial files open with their own self "0 FILE" header;
+            # strip leading ones so consumers that stop at the first
+            # "0 FILE" line (title/children/viz faces) see the content.
+            content = text.replace("\r\n", "\n").split("\n")
+            while content and content[0].strip().startswith("0 FILE"):
+                content.pop(0)
+            lib.lines.extend(content)
+            end = len(lib.lines)
+            for alias in {spelling.lower(),
+                          spelling.lower().replace("\\", "/"),
+                          spelling.lower().replace("/", "\\")}:
+                lib.blocks.setdefault(alias, (start, end))
+
+        queue = [s.lower() for s in seeds]
+        done: set[str] = set()
+        while queue and len(done) < max_files:
+            name = queue.pop(0)
+            if name in done or name in lib.blocks:
+                done.add(name)
+                continue
+            done.add(name)
+            path = next((c for c in candidates(name)
+                         if os.path.isfile(c)), None)
+            if path is None:
+                continue
+            with open(path, encoding="utf-8-sig",
+                       errors="replace") as fh:
+                register(name, fh.read())
+            try:
+                for _pos, _mat, child in lib.children(name):
+                    if child not in done and child not in lib.blocks:
+                        queue.append(child)
+            except Exception:
+                continue
+        return lib
+
+    def merge_missing(self, other: "Library") -> int:
+        """Fill keys absent here from `other`. Returns filled count."""
+        n = 0
+        for key, rng in other.blocks.items():
+            if key not in self.blocks:
+                start = len(self.lines)
+                self.lines.extend(other.lines[rng[0]:rng[1]])
+                self.blocks[key] = (start, len(self.lines))
+                n += 1
+        return n
+
     def title(self, name: str) -> str | None:
         rng = self.blocks.get(name.lower())
         if not rng:

@@ -12,9 +12,10 @@ Hackathon project: a Muse Spark agent infers a LEGO robot's kinematic chain from
 1. **New work only.** Do not copy code from any earlier project. Write everything fresh in this repo.
 2. **Never commit appearance or assembly data.** `.io`, `.ldr`, `.mpd`, renders and mesh-based MJCF live in `assets/private/` or `eval/ground_truth/` (git-ignored). Agent logs and tool outputs with part IDs/poses go to `runs/` (git-ignored). Only abstract kinematics (axes, link dimensions, gear ratios, coupling, limits), IK code/weights, primitive-geometry MJCF and generated EV3 code may be committed. See `PLAN.md` section 4a.
 3. **Never commit secrets.** API keys come from environment variables (`META_API_KEY`, `MODEL_API_KEY`). `.env` is git-ignored.
-4. **Ground truth stays out of the agent.** Files in `eval/ground_truth/` are for the verifier only. Never pass their contents (joint lists, gear ratios, link segmentation, link lengths) into agent prompts or tool outputs.
+4. **Ground truth stays out of the agent.** Files in `eval/ground_truth/` and `gt/` (including `gt/gt_joints.json`) are for the verifier only. Never pass their contents (joint lists, gear ratios, link segmentation, link lengths) into agent prompts or tool outputs. A `gt/` path reaches code only as a scorer CLI argument (`--gt`); extraction/inference code under `src/` (everything except `src/verify/`) must not import or read it — pinned by `tests/test_gt_isolation.py`.
 5. **No Streamlit.** No dashboard as a main feature.
 6. Do not commit, push or amend unless asked.
+7. **BrickRobotProject only.** An extraction session works only inside this repository. Never read, list, or depend on files outside it.
 
 ## Architecture
 
@@ -75,7 +76,7 @@ python -m src.catalog.draft runs/<id>/parts.json -o src/catalog/parts.yaml  # ca
 python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --ports config/ports.local.yaml  # wiring check
 python -m src.agent.run --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --run-id <id> --heuristic  # stage-2 baseline
 python -m src.verify.segmentation --pred runs/<id>/links_joints.json --gt eval/ground_truth/segmentation.json  # link score
-python -m src.verify.joints --pred runs/<id>/links_joints_public.json --gt eval/ground_truth/kinematics_gt.json  # joint score
+python -m src.verify.joints --pred runs/<id>/links_joints_public.json --gt gt/gt_joints.json  # joint score
 python -m src.viz.overlay --pred runs/<id>/links_joints.json -o runs/<id>/overlay.json  # Blender overlay data
 python -m src.agent.sensors --parts runs/<id>/parts.json --links runs/<id>/links_joints.json --ports config/ports.local.yaml -o runs/<id>/sensors.json  # sensor-joint association
 python -m src.ev3.check                                           # EV3 connectivity

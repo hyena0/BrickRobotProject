@@ -1,0 +1,81 @@
+{
+  "description": "GT joint axes (measured), extraction frame. Grade axis-perpendicular position only; axis direction up to sign.",
+  "grading": {
+    "position": "distance from pred point to GT axis line (point-along-axis is unobservable gauge)",
+    "axis": "|dot(pred_axis, gt_axis)| >= cos(tolerance_deg)"
+  },
+  "joints": {
+    "J1": {
+      "point": [
+        21.72,
+        79.56,
+        -147.83
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    "J2": {
+      "point": [
+        21.87,
+        79.81,
+        -53.23
+      ],
+      "axis": [
+        0.7071,
+        0.7071,
+        0
+      ]
+    },
+    "J3": {
+      "point": [
+        23.37,
+        78.06,
+        115.02
+      ],
+      "axis": [
+        0.7071,
+        0.7071,
+        0
+      ]
+    },
+    "J4": {
+      "point": [
+        -38.28,
+        139.66,
+        162.37
+      ],
+      "axis": [
+        0.7071,
+        -0.7071,
+        0
+      ]
+    },
+    "J5": {
+      "point": [
+        -82.48,
+        183.86,
+        162.37
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    "J6": {
+      "point": [
+        -110.98,
+        212.51,
+        162.37
+      ],
+      "axis": [
+        0.7071,
+        -0.7071,
+        0
+      ]
+    }
+  }
+}

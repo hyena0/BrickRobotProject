@@ -106,15 +106,25 @@ def _classify_axle_fit(other: dict, catalog: dict,
     if _entry(catalog, other["part_id"]).get("category") == "bush":
         return "axle_in_axle_hole"  # bush clamps the axle
     if line_point is not None and line_dir is not None and holes:
-        # Position-aware: the hole the line actually passes through
-        # decides. Nearest hole centre within tolerance wins.
+        # Position-aware: the bore the line actually passes through
+        # decides. Bores are tunnels, not points: match the segment
+        # from each hole through the part centre to its mirror, so a
+        # shaft through a gear's mid-plane counts even when only the
+        # face entries are catalogued. Nearest segment wins.
+        centre = _pos(other)
+        direction = line_dir / float(np.linalg.norm(line_dir))
         best = None
         for hole in holes:
-            rel = hole_world(other, hole) - line_point
-            lateral = rel - float(np.dot(rel, line_dir)) * line_dir
-            dist = float(np.linalg.norm(lateral))
-            if best is None or dist < best[0]:
-                best = (dist, hole.get("kind"))
+            face = hole_world(other, hole)
+            mirror = 2.0 * centre - face
+            closest = float("inf")
+            for _t in (0.0, 0.5, 1.0):
+                probe = mirror + _t * (face - mirror)
+                rel = probe - line_point
+                lateral = rel - float(np.dot(rel, direction)) * direction
+                closest = min(closest, float(np.linalg.norm(lateral)))
+            if best is None or closest < best[0]:
+                best = (closest, hole.get("kind"))
         if best is not None and best[0] <= AXLE_LINE_TOL_MM:
             return ("axle_in_axle_hole" if best[1] == "axle"
                     else "axle_in_round_hole")
@@ -268,10 +278,53 @@ def check_gear_mesh(uid_a: str, uid_b: str, parts: list[dict],
     if ta is None or tb is None:
         result["note"] = "missing teeth in catalog"
         return result
+    if relation == "parallel" and \
+            "turntable" not in {ea.get("gear_kind"), eb.get("gear_kind")}:
+        # Compound (same-shaft) test first: centres on one line within
+        # bore tolerance, coupled by one axle part whose span covers
+        # both gear planes. Blender close-ups (stage3-mesh/stack*_iso)
+        # show stacked 16T+8T pairs riding one through-axle although
+        # the bore-fit detector reports only contact, so a spanning
+        # through-axle counts as the rigid coupling here. Turntable
+        # halves are excluded: they bolt to links (no axle bore), so
+        # a shaft through their clearance never locks them.
+        ua = np.asarray(ax_a, dtype=float)
+        ua = ua / np.linalg.norm(ua)
+        rel = _pos(b) - _pos(a)
+        along = float(np.dot(rel, ua))
+        lat = float(np.linalg.norm(rel - along * ua))
+        if lat <= AXLE_LINE_TOL_MM:
+            lo, hi = min(0.0, along), max(0.0, along)
+            for p in parts:
+                if p["uid"] in (uid_a, uid_b):
+                    continue
+                if _entry(catalog, p["part_id"]).get("category") \
+                        != "axle":
+                    continue
+                pax = axis_world(p, catalog)
+                if pax is None:
+                    continue
+                if min(_angle_deg(pax, ua),
+                       180.0 - _angle_deg(pax, ua)) > 2.0:
+                    continue
+                prel = _pos(p) - _pos(a)
+                s = float(np.dot(prel, ua))
+                if float(np.linalg.norm(prel - s * ua)) > \
+                        AXLE_LINE_TOL_MM:
+                    continue
+                half = _axle_span_mm(p, catalog)
+                tol = 4.0
+                if s - half - tol <= lo and s + half + tol >= hi:
+                    result["kind"] = "compound"
+                    result["expected_ldu"] = result["centre_ldu"]
+                    result["meshes"] = True
+                    result["note"] = ("same shaft via %s" % p["uid"])
+                    return result
     override = ea.get("mesh_distance_ldu") or eb.get("mesh_distance_ldu")
     if override is not None:
         expected = float(override)
         kind = eb.get("gear_kind") or ea.get("gear_kind")
+        tol_ldu = 2.0
     elif relation == "parallel" and {ea.get("gear_kind"),
                                      eb.get("gear_kind")} <= {"spur",
                                                              "double-bevel",
@@ -279,20 +332,62 @@ def check_gear_mesh(uid_a: str, uid_b: str, parts: list[dict],
         # Stage plan rule: centre = 1.25 * (T1 + T2) LDU.
         expected = 1.25 * (ta + tb)
         kind = "external"
+        tol_ldu = 2.0
     elif relation == "parallel":
+        if "ring" in {ea.get("gear_kind"), eb.get("gear_kind")}:
+            # Internal ring gears engage pinions inside the ring
+            # (solver-virtualized); never as external spur meshes.
+            result["note"] = "ring kind excluded from external mesh"
+            result["expected_ldu"] = None
+            return result
         expected = 1.25 * (ta + tb)
         kind = "external"
+        tol_ldu = 2.0
     elif relation == "perpendicular":
-        result["note"] = "bevel/worm mesh needs mesh_distance_ldu entry"
-        result["expected_ldu"] = None
-        return result
+        # Bevel geometry measured from the embedded LDraw library
+        # (tip radii, tooth placements) and validated against assembly
+        # pair distances. Bevel mounts allow more axial variance than
+        # spur mounts, hence the wider tolerance.
+        ka, kb = ea.get("gear_kind"), eb.get("gear_kind")
+        kinds = {ka, kb}
+        tol_ldu = 2.5
+        if kinds <= {"bevel"}:
+            # Equal-mitre bevel pairs share one pitch-cone apex:
+            # centre follows the pitch radii plus a 2 LDU apex
+            # allowance (12T pairs observed at 21.5-25.2 LDU).
+            expected = 1.25 * math.sqrt(ta * ta + tb * tb) + 2.0
+            kind = "bevel"
+        elif "double-bevel" in kinds and kinds <= {"bevel",
+                                                  "double-bevel",
+                                                  "turntable"}:
+            # Double-bevel teeth mesh at 90 deg with a thicker cone;
+            # constant validated on 12T-class pairs (26.8-29.3 LDU).
+            expected = 28.0
+            kind = "bevel"
+        elif kinds == {"knob"}:
+            # 4-lobe knob wheels interleave lobes; tip radius ~30 LDU
+            # measured from part geometry (single-site validation).
+            expected = 28.0
+            kind = "knob"
+        elif "turntable" in kinds and kinds <= {"turntable", "spur"}:
+            # Crown mesh: spur pinion against turntable face teeth;
+            # spur sum plus one module allowance for the rim cut
+            # (56T site observed at 81.9-83.0 LDU vs 80.0).
+            expected = 1.25 * (ta + tb) + 2.5
+            kind = "crown"
+        else:
+            result["note"] = ("unsupported perpendicular kinds %s" %
+                              sorted(k or "?" for k in kinds))
+            result["expected_ldu"] = None
+            return result
     else:
         result["note"] = "skew axes never mesh"
         result["expected_ldu"] = None
         return result
     result["expected_ldu"] = round(expected, 3)
     result["kind"] = kind
-    result["meshes"] = abs(dist_ldu - expected) <= 2.0
+    result["meshes"] = abs(dist_ldu - expected) <= (
+        tol_ldu if relation == "perpendicular" else 2.0)
     return result
 
 

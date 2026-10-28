@@ -1,0 +1,7 @@
+0 Fixture: asymmetric rotation (X90 then Z90) plus a rotated submodel
+0 Name: rotated
+0 FILE sub.gear
+1 4 10 0 0 1 0 0 0 0 -1 0 1 0 gear8t.dat
+0 NOFILE
+1 4 0 0 40 0 -1 0 1 0 0 0 0 1 sub.gear
+1 4 10 20 30 0 0 1 1 0 0 0 1 0 gear16t.dat

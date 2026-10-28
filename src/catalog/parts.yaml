@@ -170,8 +170,8 @@
   teeth: null
 15100.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: null
   category: pin
@@ -325,8 +325,8 @@
   teeth: null
 23948.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 11
   category: axle
@@ -706,8 +706,8 @@
   teeth: 4
 32073.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 5
   category: axle
@@ -1384,8 +1384,8 @@
   teeth: 24
 3705.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 4
   category: axle
@@ -1398,8 +1398,8 @@
   teeth: null
 3706.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 6
   category: axle
@@ -1759,8 +1759,8 @@
   teeth: null
 44294.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 7
   category: axle
@@ -1807,8 +1807,8 @@
   teeth: null
 4519.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 3
   category: axle
@@ -1991,12 +1991,16 @@
   review: false
   teeth: null
 59443.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 1
+  - 0
   axle_length: null
   category: connector
   evidence: 'title: Technic Axle Joiner Inline Smooth; structural connector, holes
-    from geometry; length axis unresolved (not needed for Stage 2); generic axle bore
-    at origin; source override(LDraw.org)'
+    from geometry; bore axis +Y unanimous over all 8 instances vs connected axle
+    lines (2026-10-28 audit); generic axle bore at origin;
+    source override(LDraw.org)'
   gear_kind: null
   holes:
   - kind: axle
@@ -2107,8 +2111,8 @@
   teeth: null
 60485.dat:
   axis_local:
-  - 0
   - 1
+  - 0
   - 0
   axle_length: 9
   category: axle

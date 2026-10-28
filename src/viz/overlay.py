@@ -20,7 +20,10 @@ def build_overlay(pred_path: str) -> dict:
             colours[uid] = {"link": link["id"], "slot": i}
     arrows = [{"id": j["id"], "axis": j["axis"], "point_mm": j["point_mm"],
                "parent": j["parent"], "child": j["child"],
-               "confidence": j.get("confidence")}
+               "confidence": j.get("confidence"),
+               "style": (j.get("status", "selected")
+                         if j.get("status", "selected")
+                         in ("selected", "dropped") else "rejected")}
               for j in pred.get("joints", [])]
     return {"colours": colours, "arrows": arrows,
             "base": pred.get("base"), "end_effector": pred.get("end_effector")}

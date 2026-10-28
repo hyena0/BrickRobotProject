@@ -47,7 +47,11 @@ def main() -> None:
     gt = json.load(open(args.gt, encoding="utf-8"))
     members = {link["id"]: link.get("members", [])
                for link in pred.get("links", [])}
-    result = agreement(members, gt.get("membership", {}))
+    try:
+        result = agreement(members, gt.get("membership", {}))
+    except ValueError:
+        print("ground-truth membership is empty or pending; cannot score")
+        raise SystemExit(2)
     print(f"accuracy={result['accuracy']:.3f} "
           f"({result['correct']}/{result['scored']})")
     print(f"gate>=0.90: {'PASS' if result['accuracy'] >= 0.90 else 'FAIL'}")

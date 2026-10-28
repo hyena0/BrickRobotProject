@@ -246,3 +246,25 @@ def test_wiring_check_rejects_semantic_keys(tmp_path):
                    "joint: J1}\n")
     errors = check(parts, catalog, ports)
     assert any("joint" in e for e in errors)
+
+
+def test_parser_asymmetric_rotation_and_submodel_compose():
+    # Rz(90) @ Rx(90) is asymmetric: a transposed read gives a
+    # different matrix, so this fixture traps row/column swaps.
+    # Submodel child (Rx90 at (10,0,0) LDU) inside a holder
+    # (Rz90 at (0,0,40) LDU) checks compose order and that the
+    # -Y-up to Z-up conversion applies exactly once.
+    import numpy as np
+
+    parts = parse_file(os.path.join(FIX, "rotated.ldr"))
+    by_part = {p["part_id"]: p for p in parts}
+    # Converted: pos (x, z, -y) * 0.4; R rows remap(L r0),
+    # remap(L r2), -remap(L r1) with remap(r) = (r0, r2, -r1).
+    assert by_part["gear16t.dat"]["position_mm"] == [4.0, 12.0, -8.0]
+    assert by_part["gear8t.dat"]["position_mm"] == [0.0, 16.0, -4.0]
+    want = [[0, 1, 0], [0, 0, -1], [-1, 0, 0]]
+    for pid in ("gear16t.dat", "gear8t.dat"):
+        got = by_part[pid]["rotation"]
+        assert np.allclose(np.asarray(got), np.asarray(want)), pid
+        assert not np.allclose(np.asarray(got),
+                               np.asarray(got).T), pid
