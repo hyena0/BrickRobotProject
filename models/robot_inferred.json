@@ -1,0 +1,253 @@
+{
+ "frame": "base link, Z up, mm",
+ "links": [
+  {
+   "id": "D0"
+  },
+  {
+   "id": "D1"
+  },
+  {
+   "id": "D2"
+  },
+  {
+   "id": "D3"
+  },
+  {
+   "id": "D4"
+  },
+  {
+   "id": "D5"
+  },
+  {
+   "id": "D6"
+  }
+ ],
+ "joints": [
+  {
+   "id": "J1",
+   "type": "revolute",
+   "parent": "D0",
+   "child": "D1",
+   "axis": [
+    0.0,
+    0.0012,
+    1.0
+   ],
+   "point_mm": [
+    21.76,
+    79.58,
+    -139.78
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  },
+  {
+   "id": "J2",
+   "type": "revolute",
+   "parent": "D1",
+   "child": "D2",
+   "axis": [
+    0.707,
+    0.7072,
+    -0.0001
+   ],
+   "point_mm": [
+    21.77,
+    79.71,
+    -53.02
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  },
+  {
+   "id": "J3",
+   "type": "revolute",
+   "parent": "D2",
+   "child": "D3",
+   "axis": [
+    0.707,
+    0.7072,
+    0.0
+   ],
+   "point_mm": [
+    23.37,
+    78.06,
+    115.02
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  },
+  {
+   "id": "J4",
+   "type": "revolute",
+   "parent": "D3",
+   "child": "D4",
+   "axis": [
+    -0.7071,
+    0.7071,
+    0.0
+   ],
+   "point_mm": [
+    -37.39,
+    138.83,
+    162.38
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  },
+  {
+   "id": "J5",
+   "type": "revolute",
+   "parent": "D4",
+   "child": "D5",
+   "axis": [
+    0.0008,
+    -0.0008,
+    -1.0
+   ],
+   "point_mm": [
+    -82.56,
+    183.99,
+    162.22
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  },
+  {
+   "id": "J6",
+   "type": "revolute",
+   "parent": "D5",
+   "child": "D6",
+   "axis": [
+    -0.7068,
+    0.7074,
+    0.0005
+   ],
+   "point_mm": [
+    -115.29,
+    216.88,
+    162.33
+   ],
+   "limits_deg": [
+    -180.0,
+    180.0
+   ],
+   "zero": "pose in the source file"
+  }
+ ],
+ "actuators": [
+  {
+   "id": "p000147",
+   "brick": "right",
+   "port": "B",
+   "motor": "medium"
+  },
+  {
+   "id": "p000148",
+   "brick": "left",
+   "port": "B",
+   "motor": "large"
+  },
+  {
+   "id": "p000149",
+   "brick": "left",
+   "port": "A",
+   "motor": "large"
+  },
+  {
+   "id": "p000736",
+   "brick": "left",
+   "port": "C",
+   "motor": "medium"
+  },
+  {
+   "id": "p000737",
+   "brick": "right",
+   "port": "A",
+   "motor": "medium"
+  },
+  {
+   "id": "p000743",
+   "brick": "left",
+   "port": "D",
+   "motor": "medium"
+  }
+ ],
+ "transmission": {
+  "coupling": "q = C m, q in joint degrees, m in motor degrees",
+  "C": [
+   [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    0.714286,
+    0.0,
+    0.0
+   ]
+  ]
+ },
+ "end_effector": {
+  "link": "D6",
+  "point_mm": [
+   -115.29,
+   216.88,
+   162.33
+  ]
+ }
+}

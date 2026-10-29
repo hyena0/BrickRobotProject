@@ -13,6 +13,11 @@ facts (6 joints). Ground-truth scoring pending human measurement.
 Stage 3 done via Day-4 fallback (direct ratios model-derived, wrist
 synthesized, J2/743 breaks reported): `runs/stage3/pred_C.json`.
 Stage 4 handoff: `docs/stage/English/stage3_dev.md` (read first).
+Stage 4 done (Gate 2 PASS): `src/kin/`
+(MJCF/FK/numeric IK/motor conversion) + `models/robot_inferred.json`
+/`.xml` (public, primitive geometry) + `src/verify/conventions.py`
+(sign guard, EE roll gauge); Gate 2 vs user GT v2 100% (median
+0.45mm, p95 0.97mm, n=500).
 
 ## Built / External / Pre-existing / Evaluation only / Human-provided
 

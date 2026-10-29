@@ -79,6 +79,10 @@ python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/pa
 python -m src.agent.run --model-file assets/private/<robot>.io   # 추론 실행
 python -m src.verify.run --pred runs/<id>/kinematics.json         # 검증
 python -m src.ev3.check                                           # EV3 연결 확인
+python -m src.kin.assemble --joints runs/<id>/links_joints_public.json --coupling runs/stage3/pred_C.json --ports config/ports.local.yaml --parts runs/stage1/parts.json --catalog src/catalog/parts.yaml --out models/robot_inferred.json  # 모델 조립
+python -m src.kin.mjcf --model models/robot_inferred.json --out models/robot_inferred.xml  # 단순형상 MJCF
+python -m src.kin.fk --model models/robot_inferred.json --q 0,0,0,0,0,0  # FK 자세
+python -m src.verify.ik_eval --pred models/robot_inferred.json --gt eval/ground_truth/kinematics_gt.json --n 500  # Gate 2 (GT 블라인드)
 ```
 
 명령어가 바뀌면 이 절을 업데이트합니다.

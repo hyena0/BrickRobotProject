@@ -80,6 +80,10 @@ python -m src.verify.joints --pred runs/<id>/links_joints_public.json --gt gt/gt
 python -m src.viz.overlay --pred runs/<id>/links_joints.json -o runs/<id>/overlay.json  # Blender overlay data
 python -m src.agent.sensors --parts runs/<id>/parts.json --links runs/<id>/links_joints.json --ports config/ports.local.yaml -o runs/<id>/sensors.json  # sensor-joint association
 python -m src.ev3.check                                           # EV3 connectivity
+python -m src.kin.assemble --joints runs/<id>/links_joints_public.json --coupling runs/stage3/pred_C.json --ports config/ports.local.yaml --parts runs/stage1/parts.json --catalog src/catalog/parts.yaml --out models/robot_inferred.json  # assemble model
+python -m src.kin.mjcf --model models/robot_inferred.json --out models/robot_inferred.xml  # primitive MJCF
+python -m src.kin.fk --model models/robot_inferred.json --q 0,0,0,0,0,0  # FK pose
+python -m src.verify.ik_eval --pred models/robot_inferred.json --gt eval/ground_truth/kinematics_gt.json --n 500  # Gate 2 (GT-blind)
 ```
 
 Update this section when commands change.

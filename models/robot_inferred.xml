@@ -1,0 +1,33 @@
+<mujoco>
+  <compiler angle="degree" />
+  <worldbody>
+    <body name="D1" pos="21.7600 79.5800 -139.7800">
+      <joint name="J1" type="hinge" axis="0.0000 0.0012 1.0000" range="-180.0 180.0" />
+      <geom type="capsule" fromto="0.0000 0.0000 0.0000 0.0100 0.1300 86.7600" size="8.0" />
+      <body name="D2" pos="0.0100 0.1300 86.7600">
+        <joint name="J2" type="hinge" axis="0.7070 0.7072 -0.0001" range="-180.0 180.0" />
+        <geom type="capsule" fromto="0.0000 0.0000 0.0000 1.6000 -1.6500 168.0400" size="8.0" />
+        <body name="D3" pos="1.6000 -1.6500 168.0400">
+          <joint name="J3" type="hinge" axis="0.7070 0.7072 0.0000" range="-180.0 180.0" />
+          <geom type="capsule" fromto="0.0000 0.0000 0.0000 -60.7600 60.7700 47.3600" size="8.0" />
+          <body name="D4" pos="-60.7600 60.7700 47.3600">
+            <joint name="J4" type="hinge" axis="-0.7071 0.7071 0.0000" range="-180.0 180.0" />
+            <geom type="capsule" fromto="0.0000 0.0000 0.0000 -45.1700 45.1600 -0.1600" size="8.0" />
+            <body name="D5" pos="-45.1700 45.1600 -0.1600">
+              <joint name="J5" type="hinge" axis="0.0008 -0.0008 -1.0000" range="-180.0 180.0" />
+              <geom type="capsule" fromto="0.0000 0.0000 0.0000 -32.7300 32.8900 0.1100" size="8.0" />
+              <body name="D6" pos="-32.7300 32.8900 0.1100">
+                <joint name="J6" type="hinge" axis="-0.7068 0.7074 0.0005" range="-180.0 180.0" />
+                <geom type="capsule" fromto="0.0000 0.0000 0.0000 -21.2042 21.2222 0.0150" size="8.0" />
+                <site name="ee" pos="0.0000 0.0000 0.0000" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <body name="base_stub" pos="21.7600 79.5800 -139.7800">
+      <geom type="capsule" fromto="0.0000 0.0000 0.0000 -0.0000 -0.0480 -40.0000" size="8.0" />
+    </body>
+  </worldbody>
+</mujoco>
