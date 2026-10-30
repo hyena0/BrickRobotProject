@@ -1,0 +1,8 @@
+# Brick topology for wiring.yaml + codegen (Stage 5D).
+#
+# 5D arms use one EV3 brick (ports A-D / 1-4). The two-brick left/right
+# layout used by 5B is preserved through count: 2 (names order = fill
+# order); 5B files are untouched. Missing file = single "left" brick
+# (historical behavior).
+count: 1
+names: ["left"]

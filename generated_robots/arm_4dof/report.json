@@ -1,0 +1,352 @@
+{
+  "ok": true,
+  "score": [
+    14,
+    50,
+    4
+  ],
+  "link_lengths": [
+    16.0,
+    120.0,
+    96.0,
+    44.0
+  ],
+  "link_errors_mm": [
+    0.0,
+    0.0,
+    4.0,
+    4.0
+  ],
+  "link_ok": true,
+  "reach_spec_mm": 276.0,
+  "reach_actual_mm": 276.0,
+  "design_ranges_deg": [
+    [
+      -150.0,
+      150.0
+    ],
+    [
+      -30.0,
+      100.0
+    ],
+    [
+      -120.0,
+      120.0
+    ],
+    [
+      -180.0,
+      180.0
+    ]
+  ],
+  "overlap": {
+    "ok": true,
+    "pairs": []
+  },
+  "bom": {
+    "15462.dat": 2,
+    "2780.dat": 6,
+    "32062.dat": 2,
+    "32269.dat": 3,
+    "32270.dat": 4,
+    "32316.dat": 4,
+    "32524.dat": 2,
+    "3705.dat": 4,
+    "40490.dat": 6,
+    "44294.dat": 4,
+    "6632.dat": 2,
+    "94925.dat": 7,
+    "95658.dat": 2,
+    "99455.dat": 2
+  },
+  "bom_check": {
+    "ok": true,
+    "shortfalls": []
+  },
+  "ev3_gate": {
+    "pass": true,
+    "ports": {
+      "pass": true,
+      "n_motors": 4,
+      "ports": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "problems": []
+    },
+    "stock": {
+      "pass": true,
+      "need": {
+        "medium": 2,
+        "large": 2
+      },
+      "own": {
+        "large": 2,
+        "medium": 4
+      },
+      "shortfalls": []
+    },
+    "torque": {
+      "pass": true,
+      "joints": [
+        {
+          "joint": "J1",
+          "motor": "medium",
+          "required_Ncm": 0.0,
+          "available_Ncm": 6.8,
+          "margin": null,
+          "unloaded": true,
+          "pass": true
+        },
+        {
+          "joint": "J2",
+          "motor": "large",
+          "required_Ncm": 12.041,
+          "available_Ncm": 42.5,
+          "margin": 3.53,
+          "unloaded": false,
+          "pass": true
+        },
+        {
+          "joint": "J3",
+          "motor": "large",
+          "required_Ncm": 1.578,
+          "available_Ncm": 42.5,
+          "margin": 26.929,
+          "unloaded": false,
+          "pass": true
+        },
+        {
+          "joint": "J4",
+          "motor": "medium",
+          "required_Ncm": 0.102,
+          "available_Ncm": 6.8,
+          "margin": 66.651,
+          "unloaded": false,
+          "pass": true
+        }
+      ],
+      "link_masses_kg": {
+        "L0": 0.0597,
+        "L1": 0.0937,
+        "L2": 0.0934,
+        "L3": 0.0604,
+        "L4": 0.004
+      },
+      "gravity_m_s2": 9.81,
+      "efficiency": 0.85,
+      "rated_Ncm": {
+        "large": 30.0,
+        "medium": 8.0
+      }
+    },
+    "cable": {
+      "pass": true,
+      "motors": [
+        {
+          "uid": "p000003",
+          "link": "L0",
+          "required_mm": 205.3,
+          "cable_mm": 500.0,
+          "pass": true
+        },
+        {
+          "uid": "p000016",
+          "link": "L1",
+          "required_mm": 276.2,
+          "cable_mm": 500.0,
+          "pass": true
+        },
+        {
+          "uid": "p000030",
+          "link": "L2",
+          "required_mm": 373.1,
+          "cable_mm": 500.0,
+          "pass": true
+        },
+        {
+          "uid": "p000042",
+          "link": "L3",
+          "required_mm": 470.0,
+          "cable_mm": 500.0,
+          "pass": true
+        }
+      ],
+      "brick_pos_mm": [
+        120.0,
+        0.0,
+        0.0
+      ],
+      "slack_mm": 50.0
+    },
+    "driver": {
+      "pass": true,
+      "problems": [],
+      "C": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.6,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.6,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "motors": [
+        "p000003",
+        "p000016",
+        "p000030",
+        "p000042"
+      ]
+    },
+    "config": {
+      "motors": {
+        "large": {
+          "rated_Ncm": 30.0,
+          "source": "assumed intermittent (demo-duty) rating, on the order of 60-75% of the commonly cited EV3-large stall (~40 Ncm, unverified); verify against the datasheet before sizing hardware"
+        },
+        "medium": {
+          "rated_Ncm": 8.0,
+          "source": "assumed running rating for the EV3-medium class (unverified); verify against the datasheet before sizing hardware"
+        }
+      },
+      "efficiency": {
+        "value": 0.85,
+        "source": "assumed two spur stages at ~0.92 each; verify"
+      },
+      "gravity_m_s2": 9.81,
+      "gravity_source": "standard gravity",
+      "masses_g": {
+        "default": 2.0,
+        "by_category": {
+          "beam": 4.0,
+          "gear": 1.5,
+          "axle": 0.7,
+          "pin": 0.3,
+          "motor": 60.0,
+          "turntable": 5.0,
+          "bush": 0.5,
+          "connector": 1.0,
+          "brick": 5.0,
+          "sensor": 15.0,
+          "rack": 2.0
+        },
+        "by_part": {
+          "95658.dat": 70.0,
+          "99455.dat": 45.0,
+          "40490.dat": 5.0,
+          "32524.dat": 3.5,
+          "32316.dat": 2.5,
+          "6632.dat": 1.5
+        },
+        "source": "assumed Technic part masses (category estimates with per-part overrides for the arm_4dof BOM); verify all with a scale"
+      },
+      "cable": {
+        "length_mm": 500.0,
+        "slack_mm": 50.0,
+        "source": "assumed 50 cm EV3 cable plus 50 mm service slack; verify against owned cables"
+      },
+      "brick_pos_mm": [
+        120.0,
+        0.0,
+        0.0
+      ],
+      "brick_note": "assumed brick beside the base; adjust to the real placement"
+    }
+  },
+  "segments": {
+    "p000001": 0,
+    "p000002": 0,
+    "p000003": 0,
+    "p000004": 0,
+    "p000005": 0,
+    "p000006": 0,
+    "p000007": 0,
+    "p000008": 0,
+    "p000009": 0,
+    "p000010": 0,
+    "p000011": 0,
+    "p000012": 1,
+    "p000013": 1,
+    "p000014": 1,
+    "p000015": 1,
+    "p000016": 1,
+    "p000017": 1,
+    "p000018": 1,
+    "p000019": 1,
+    "p000020": 1,
+    "p000021": 1,
+    "p000022": 1,
+    "p000023": 1,
+    "p000024": 1,
+    "p000025": 1,
+    "p000026": 2,
+    "p000027": 2,
+    "p000028": 2,
+    "p000029": 2,
+    "p000030": 2,
+    "p000031": 2,
+    "p000032": 2,
+    "p000033": 2,
+    "p000034": 2,
+    "p000035": 2,
+    "p000036": 2,
+    "p000037": 2,
+    "p000038": 2,
+    "p000039": 2,
+    "p000040": 3,
+    "p000041": 3,
+    "p000042": 3,
+    "p000043": 3,
+    "p000044": 3,
+    "p000045": 3,
+    "p000046": 3,
+    "p000047": 3,
+    "p000048": 3,
+    "p000049": 3,
+    "p000050": 3
+  },
+  "beams": [
+    {
+      "uid": "p000011",
+      "part_id": "32316.dat",
+      "segment": 0
+    },
+    {
+      "uid": "p000025",
+      "part_id": "32316.dat",
+      "segment": 1
+    },
+    {
+      "uid": "p000039",
+      "part_id": "6632.dat",
+      "segment": 2
+    },
+    {
+      "uid": "p000050",
+      "part_id": "6632.dat",
+      "segment": 3
+    }
+  ],
+  "ldraw": {
+    "n_parts": 50,
+    "max_snap_mm": 0.0
+  }
+}

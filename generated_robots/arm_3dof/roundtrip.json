@@ -1,0 +1,33 @@
+{
+  "robot": "arm_3dof",
+  "mode": "heuristic",
+  "pipeline": "generic tools + 5D minimal driver",
+  "overall_pass": false,
+  "gates": {
+    "joint_count": {
+      "pass": false,
+      "pred": 18,
+      "expected": 3
+    },
+    "axes": {
+      "pass": false,
+      "reason": "joint count differs; legs skipped"
+    },
+    "links": {
+      "pass": false,
+      "reason": "joint count differs; legs skipped"
+    },
+    "ratios": {
+      "pass": false,
+      "reason": "joint count differs; legs skipped"
+    },
+    "ik": {
+      "pass": false,
+      "reason": "joint count differs; legs skipped",
+      "success_rate": 0.0,
+      "median_pos_mm": null,
+      "n": 0
+    }
+  },
+  "notes": "joint count differs; legs skipped"
+}

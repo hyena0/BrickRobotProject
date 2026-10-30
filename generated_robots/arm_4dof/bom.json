@@ -1,0 +1,169 @@
+{
+ "robot": "arm_4dof",
+ "bom": {
+  "parts": {
+   "15462.dat": {
+    "label": "Technic, Axle  5L with Stop",
+    "need": 2,
+    "own": 6,
+    "ok": true
+   },
+   "2780.dat": {
+    "label": "Technic, Pin with Short Friction Ridges",
+    "need": 6,
+    "own": 194,
+    "ok": true
+   },
+   "32062.dat": {
+    "label": "Technic, Axle  2L Notched",
+    "need": 2,
+    "own": 13,
+    "ok": true
+   },
+   "32269.dat": {
+    "label": "Technic, Gear 20 Tooth Double Bevel",
+    "need": 3,
+    "own": 4,
+    "ok": true
+   },
+   "32270.dat": {
+    "label": "Technic, Gear 12 Tooth Double Bevel",
+    "need": 4,
+    "own": 25,
+    "ok": true
+   },
+   "32316.dat": {
+    "label": "Technic, Liftarm Thick 1 x 5",
+    "need": 4,
+    "own": 12,
+    "ok": true
+   },
+   "32524.dat": {
+    "label": "Technic, Liftarm Thick 1 x 7",
+    "need": 2,
+    "own": 11,
+    "ok": true
+   },
+   "3705.dat": {
+    "label": "Technic, Axle  4L",
+    "need": 4,
+    "own": 11,
+    "ok": true
+   },
+   "40490.dat": {
+    "label": "Technic, Liftarm Thick 1 x 9",
+    "need": 6,
+    "own": 16,
+    "ok": true
+   },
+   "44294.dat": {
+    "label": "Technic, Axle  7L",
+    "need": 4,
+    "own": 9,
+    "ok": true
+   },
+   "6632.dat": {
+    "label": "Technic, Liftarm Thin 1 x 3 - Axle Holes",
+    "need": 2,
+    "own": 8,
+    "ok": true
+   },
+   "94925.dat": {
+    "label": "Technic, Gear 16 Tooth - Axle Hole with Closed Sides",
+    "need": 7,
+    "own": 8,
+    "ok": true
+   },
+   "95658.dat": {
+    "label": "Electric, Motor EV3, Large",
+    "need": 2,
+    "own": 2,
+    "ok": true
+   },
+   "99455.dat": {
+    "label": "Electric, Motor EV3, Medium",
+    "need": 2,
+    "own": 4,
+    "ok": true
+   }
+  },
+  "shortfalls": [],
+  "within_stock": true,
+  "total_kinds": 14,
+  "total_parts": 50
+ },
+ "modules": {
+  "base_yaw": {
+   "2780.dat": 1,
+   "32062.dat": 1,
+   "32269.dat": 1,
+   "32270.dat": 2,
+   "3705.dat": 2,
+   "40490.dat": 2,
+   "99455.dat": 1
+  },
+  "pitch": {
+   "15462.dat": 1,
+   "2780.dat": 2,
+   "32269.dat": 1,
+   "32270.dat": 1,
+   "32316.dat": 1,
+   "40490.dat": 2,
+   "44294.dat": 2,
+   "94925.dat": 2,
+   "95658.dat": 1
+  },
+  "wrist_roll": {
+   "2780.dat": 1,
+   "32062.dat": 1,
+   "32524.dat": 2,
+   "3705.dat": 2,
+   "94925.dat": 3,
+   "99455.dat": 1
+  }
+ },
+ "wiring_map": {
+  "A": {
+   "uid": "p000003",
+   "kind": "medium",
+   "joint": "J1"
+  },
+  "B": {
+   "uid": "p000016",
+   "kind": "large",
+   "joint": "J2"
+  },
+  "C": {
+   "uid": "p000030",
+   "kind": "large",
+   "joint": "J3"
+  },
+  "D": {
+   "uid": "p000042",
+   "kind": "medium",
+   "joint": "J4"
+  }
+ },
+ "homing": {
+  "J1": {
+   "method": "stall",
+   "sensor_port": null,
+   "dock": null
+  },
+  "J2": {
+   "method": "stall",
+   "sensor_port": null,
+   "dock": null
+  },
+  "J3": {
+   "method": "stall",
+   "sensor_port": null,
+   "dock": null
+  },
+  "J4": {
+   "method": "stall",
+   "sensor_port": null,
+   "dock": null
+  }
+ }
+}

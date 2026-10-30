@@ -1,0 +1,28 @@
+{
+  "_note": "Reference 3-joint spec (yaw,pitch,pitch; no wrist/gripper). All links are 8mm multiples. link0=16 is the J1 height (base-yaw gear plane), not 0: the joint point rides the module geometry. L1=136 forces a 48mm gap-0 so M2's fat large motor clears the base motor in Z (4.4mm, yaw-independent); L2=88 forces a 24mm gap-1 (usable 16 + 8 end margins). J1 is +-90 (not the module +-150): at +-150 M2's wide in-mount beams (y +-19.6) sweep 3.7mm into the base large motor (BVH mesh-exact); +-90 is BVH-green over all 27 range-end poses. Restoring wider yaw needs narrower mount beams (template change).",
+  "gripper": false,
+  "joints": [
+    "yaw",
+    "pitch",
+    "pitch"
+  ],
+  "link_lengths_mm": [
+    16,
+    136,
+    88
+  ],
+  "ranges_deg": [
+    [
+      -90,
+      90
+    ],
+    [
+      -30,
+      100
+    ],
+    [
+      -120,
+      120
+    ]
+  ]
+}
