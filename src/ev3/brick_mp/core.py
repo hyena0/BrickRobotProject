@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Shared command executor for the Pybricks bricks.
 
 Pure logic over the motor and sensor objects: validates the id, cmd and
@@ -213,6 +213,7 @@ class BrickCore:
             if settled < SAME_GOAL_ERR_DEG:
                 return Ack(mid, True, {"port": port,
                                        "position": motor.position(),
+                                       "residual": motor.position() - target,
                                        "skipped": True})
         motor.start_move(target, speed)
         homed = self._supervised_wait([(port, target)], homing, pump)
@@ -222,7 +223,8 @@ class BrickCore:
         if self.guards.latched:
             return Ack(mid, False,
                        error="guard stop: " + str(self.guards.latch_reason))
-        return Ack(mid, True, {"port": port, "position": motor.position()})
+        return Ack(mid, True, {"port": port, "position": motor.position(),
+                               "residual": motor.position() - target})
 
     def _run_targets(self, args, mid, pump):
         refused = self._refuse_if_latched(mid)
@@ -262,9 +264,12 @@ class BrickCore:
             return Ack(mid, False,
                        error="guard stop: " + str(self.guards.latch_reason))
         positions = {}
+        residuals = {}
         for p, tgt in started:
             positions[p] = self.motors[p].position()
-        return Ack(mid, True, {"positions": positions})
+            residuals[p] = self.motors[p].position() - tgt
+        return Ack(mid, True, {"positions": positions,
+                               "residuals": residuals})
 
     def _run_angle(self, args, mid, pump):
         refused = self._refuse_if_latched(mid)
@@ -291,6 +296,7 @@ class BrickCore:
         for p, tgt in active:
             prev[p] = self.motors[p].position()
         stalled = {}
+        fw_stalled_ms = {}
         last = clock.now_ms()
         while True:
             clock.sleep_ms(guards.SENSOR_POLL_MS)
@@ -324,19 +330,51 @@ class BrickCore:
                 speeds[p] = (cur[p] - prev[p]) / dt_s
             prev = cur
             commanded = {}
+            judged = {}
             for p, tgt in active:
-                commanded[p] = 1.0
-            for evt in self.guards.check_stall(commanded, speeds,
-                                               stalled, dt_ms):
-                self.pending_events.append(evt)
+                # Within the arrival band the motor counts as
+                # reached: it is never judged, so stopping there is
+                # arrival, not stall.
+                if abs(cur[p] - tgt) > guards.ARRIVE_BAND_MOTOR_DEG:
+                    commanded[p] = 1.0
+                    judged[p] = tgt
+            elapsed = clock.diff_ms(now, t0)
+            # Stall verdicts only while a move runs and only after the
+            # start grace. Holding at the target never reaches this
+            # loop (same-goal moves are skipped, finished moves exit),
+            # so idle HOLD is never judged.
+            if elapsed >= guards.STALL_GRACE_MS:
+                info = {}
+                for p, tgt in judged.items():
+                    info[p] = guards.stall_detail(tgt, cur[p],
+                                                  speeds[p], elapsed)
+                for evt in self.guards.check_stall(commanded, speeds,
+                                                  stalled, dt_ms, info):
+                    self.pending_events.append(evt)
             if not self.guards.latched:
-                for p, tgt in active:
-                    if self._fw_stalled(p):
-                        if not self.guards.latched:
-                            self.guards.latched = True
-                            self.guards.latch_reason = "stall:" + str(p)
-                        self.pending_events.append(
-                            guards.GuardEvent("stall", {"port": p}))
+                for p, tgt in judged.items():
+                    if elapsed >= guards.STALL_GRACE_MS \
+                            and self._fw_stalled(p):
+                        fw = fw_stalled_ms.get(p, 0) + dt_ms
+                        fw_stalled_ms[p] = fw
+                        if fw >= guards.FW_STALL_MS:
+                            if not self.guards.latched:
+                                self.guards.latched = True
+                                self.guards.latch_reason = (
+                                    guards.stall_reason(
+                                        p, guards.stall_detail(
+                                            tgt, cur[p], speeds[p],
+                                            elapsed)))
+                            self.pending_events.append(
+                                guards.GuardEvent(
+                                    "stall",
+                                    {"port": p, "source": "firmware",
+                                     "target": tgt, "position": cur[p],
+                                     "speed": speeds[p],
+                                     "elapsed_ms": elapsed}))
+                    else:
+                        if p in fw_stalled_ms:
+                            del fw_stalled_ms[p]
             if self.guards.latched:
                 self._stop_all()
                 return False

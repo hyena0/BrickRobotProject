@@ -1,5 +1,5 @@
 #!/usr/bin/env pybricks-micropython
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Right brick program for Pybricks MicroPython (slave).
 
 Mailbox client of the left brick. Runs relayed commands through the
@@ -272,9 +272,10 @@ def build_core(cfg):
 def main():
     log.log("brick sw version: " + version.BRICK_SW_VERSION)
     try:
-        cfg = config.load_brick_config(CONFIG_PATH)
+        cfg = config.load_brick_config([config.RIGHT_PATH, CONFIG_PATH],
+                                       "right")
     except OSError:
-        log.log("no brick.local.json found, using built-in wiring")
+        log.log("no brick_right.json found, using built-in wiring")
         cfg = DEFAULT_CONFIG
     bk = build_core(cfg)
     print("right: waiting for left brick mailbox server")

@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """On-brick safety layer for the Pybricks brick programs.
 
 Same rules as the legacy brick code: sensor guards polled about every
@@ -13,7 +13,27 @@ MAX_SPEED_DEG_S = 300.0
 SENSOR_POLL_MS = 10
 STALL_TIMEOUT_MS = 300
 STALL_EPS_DEG_S = 3.0
+STALL_GRACE_MS = 300
+FW_STALL_MS = 200
+ARRIVE_BAND_MOTOR_DEG = 5.0
 HEARTBEAT_TIMEOUT_MS = 2000
+
+
+def stall_detail(target, position, speed, elapsed_ms):
+    """Structured stall context for events and latch reasons."""
+    return {"target": target, "position": position,
+            "speed": speed, "elapsed_ms": elapsed_ms}
+
+
+def stall_reason(port, info):
+    """Latch reason with port, target, actual, speed, elapsed time."""
+    if not info:
+        return "stall:" + str(port)
+    return ("stall:" + str(port)
+            + " target=" + str(info.get("target"))
+            + " position=" + str(info.get("position"))
+            + " speed=" + str(info.get("speed"))
+            + " elapsed_ms=" + str(info.get("elapsed_ms")))
 
 
 class SensorRule:
@@ -106,12 +126,15 @@ class SafetyController:
                 }))
         return events
 
-    def check_stall(self, commanded, actual_speed, stalled_ms, dt_ms):
+    def check_stall(self, commanded, actual_speed, stalled_ms, dt_ms,
+                    detail=None):
         """Track motors commanded but barely moving. Pure bookkeeping.
 
         commanded maps port to commanded speed. actual_speed maps port to
         measured speed. stalled_ms is mutated in place. Returns one stall
         event per newly stalled motor and latches the controller.
+        detail optionally maps port to a stall_detail dict, which is
+        merged into the event and the latch reason.
         """
         events = []
         for port in commanded:
@@ -124,9 +147,18 @@ class SafetyController:
             if speed < STALL_EPS_DEG_S:
                 stalled_ms[port] = stalled_ms.get(port, 0) + dt_ms
                 if stalled_ms[port] > STALL_TIMEOUT_MS:
+                    info = None
+                    if detail is not None:
+                        info = detail.get(port)
                     self.latched = True
-                    self.latch_reason = "stall:" + str(port)
-                    events.append(GuardEvent("stall", {"port": port}))
+                    self.latch_reason = stall_reason(port, info)
+                    evt_detail = {"port": port}
+                    if info is not None:
+                        for key in ("target", "position", "speed",
+                                    "elapsed_ms"):
+                            if key in info:
+                                evt_detail[key] = info[key]
+                    events.append(GuardEvent("stall", evt_detail))
                     del stalled_ms[port]
             else:
                 if port in stalled_ms:

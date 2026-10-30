@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Motor hardware abstraction for the Pybricks bricks.
 
 Ports only (outA and friends). Real hardware uses pybricks motors;

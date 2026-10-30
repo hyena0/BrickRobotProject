@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Sensor hardware abstraction for the Pybricks bricks.
 
 Ports only (in1 and friends). The brick never learns what a sensor

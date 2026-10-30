@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Brick-local JSON config loader.
 
 Reads config/brick.local.json with ujson on the brick (json fallback on
@@ -14,6 +14,8 @@ except ImportError:
 
 DEFAULT_PATH = "config/brick.local.json"
 FLAT_PATH = "brick.local.json"
+LEFT_PATH = "brick_left.json"
+RIGHT_PATH = "brick_right.json"
 
 
 def _list_dir():
@@ -26,17 +28,24 @@ def _list_dir():
     return names
 
 
-def load_brick_config(path=DEFAULT_PATH):
+def load_brick_config(path=DEFAULT_PATH, expect=None):
     """Load and validate the brick-local JSON config file.
 
-    Tries path first, then brick.local.json next to the program, so a
-    flat VS Code copy just works. When nothing is found the error lists
-    every tried path plus the files actually present, so a missing or
-    misnamed copy is visible right in the traceback. There is no wiring
-    fallback: running motors from guessed ports would be unsafe.
+    path is one file or a list of files tried in order; the legacy
+    flat brick.local.json is always tried last, so a flat VS Code
+    copy just works. Each main passes its own side file first
+    (brick_left.json on the left, brick_right.json on the right),
+    so nobody edits JSON per brick. When nothing is found the error
+    lists every tried path plus the files actually present, so a
+    missing or misnamed copy is visible right in the traceback.
+    expect optionally pins the side ("left"/"right"): a file naming
+    the other side fails loudly instead of joining the wrong link.
     """
-    tried = [path]
-    if path != FLAT_PATH:
+    if isinstance(path, str):
+        tried = [path]
+    else:
+        tried = list(path)
+    if FLAT_PATH not in tried:
         tried.append(FLAT_PATH)
     for candidate in tried:
         try:
@@ -47,7 +56,7 @@ def load_brick_config(path=DEFAULT_PATH):
             cfg = json.load(fh)
         finally:
             fh.close()
-        return _validate(cfg, candidate)
+        return _validate(cfg, candidate, expect)
     msg = "brick config not found, tried " + " and ".join(tried)
     here = _list_dir()
     if here:
@@ -55,12 +64,15 @@ def load_brick_config(path=DEFAULT_PATH):
     raise OSError(msg)
 
 
-def _validate(cfg, path):
+def _validate(cfg, path, expect=None):
     if not cfg:
         raise ValueError("brick config is empty: " + str(path))
     brick = str(cfg.get("brick", "left"))
     if brick != "left" and brick != "right":
         raise ValueError("brick must be left or right, got: " + brick)
+    if expect is not None and brick != expect:
+        raise ValueError("brick side mismatch: expected " + expect
+                         + ", got " + brick + ": " + str(path))
     return {
         "brick": brick,
         "motors": list(cfg.get("motors", [])),

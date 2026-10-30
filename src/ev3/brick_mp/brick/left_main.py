@@ -1,5 +1,5 @@
 #!/usr/bin/env pybricks-micropython
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """Left brick program for Pybricks MicroPython (master).
 
 Connects to the hub broker over WiFi with umqtt, serves the left brick
@@ -359,9 +359,10 @@ def build_core(cfg):
 def main():
     log.log("brick sw version: " + version.BRICK_SW_VERSION)
     try:
-        cfg = config.load_brick_config(CONFIG_PATH)
+        cfg = config.load_brick_config([config.LEFT_PATH, CONFIG_PATH],
+                                       "left")
     except OSError:
-        log.log("no brick.local.json found, using built-in wiring")
+        log.log("no brick_left.json found, using built-in wiring")
         cfg = DEFAULT_CONFIG
     bk = build_core(cfg)
     print("left: waiting for slave mailbox connection")

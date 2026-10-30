@@ -1,0 +1,12 @@
+{
+  "_note": "Right-brick wiring. Do NOT edit per brick: copy the whole folder to the right EV3 and run right_main.py. The left EV3 uses brick_left.json with left_main.py.",
+  "brick": "right",
+  "motors": [
+    {"port": "outA", "type": "medium"},
+    {"port": "outB", "type": "medium"}
+  ],
+  "sensors": [
+    {"port": "in1", "type": "touch"},
+    {"port": "in2", "type": "color"}
+  ]
+}

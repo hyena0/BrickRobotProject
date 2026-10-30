@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.11
+# brick-sw-version: 5B.14
 """On-brick LCD status screen (best effort, never raises).
 
 render_master and render_slave are pure: they format runtime state

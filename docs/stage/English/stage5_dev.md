@@ -190,3 +190,164 @@ Blender-depth-gated confirmation); dense Blender-gated re-sweep of
 J5/J6 with exact meshes; physical check whether the D5-D4 band
 binds motion or is a tight sliding fit; the 2.4 mm residual pose
 above plus /tmp/revalidate*.json + /tmp/win*_confirm.json evidence.
+
+## 5C stall-fix round (2026-10-30, brick sw 5B.12)
+
+Hardware jogs kept tripping the stall guard. Root causes: verdicts ran
+from move start (no grace), a single firmware-stalled poll latched at
+once, and the jog map ratios are normalized placeholders (1.0 for
+J1-J5, 0.714286 for J6) while the true Stage-3 drive ratios are
+J1 -0.0857, J3 -0.0343, J5 -0.2, J6 -0.1429, J2 fallback -0.0238,
+J4 +0.2 (runs/stage3/pred_C.json C_raw/drive). A "3 deg joint" jog
+therefore sends ~3 motor deg where J1 needs ~35.
+
+Fix (src/ev3/brick_mp/{guards,core}.py, mirrored to brick/):
+judge stall only inside the supervised move wait (idle HOLD never
+reaches it); skip all stall verdicts for STALL_GRACE_MS=300 after
+move start; firmware stalled() must read true continuously for
+FW_STALL_MS=200 (accumulator, resets on false); latch_reason now
+"stall:<port> target=.. position=.. speed=.. elapsed_ms=..".
+Jog speed stays 250 motor deg/s (>= 200 ordered).
+New tests in tests/test_brick_mp.py (hold-no-stall, start-grace,
+firmware timing, reason format); tests/test_brick_hw.py two
+expectations updated to the ordered contract (long move for the
+firmware case). Full suite: 420 passed, 9 pre-existing tests/gen
+failures unchanged. Brick re-copy needed: 12 .py files, 5B.12.
+
+## 5C jog-ratio + arrival-band round (2026-10-30, brick sw 5B.13)
+
+J6 hardware report `stall:outA target=11.0 position=6.0 ... elapsed_ms=632`
+was a 5.0-motor-deg shortfall judged as stall. Fixes:
+(1) mini.py DRIVE_RATIOS = real pred_C C_raw values (J1 -0.0857,
+J2 -0.0238 temp, J3 -0.0343, J4 +0.2, J5 -0.2, J6 -0.1429); wiring
+still from the model, ratios flippable per joint in
+config/jogmap.local.json (negative allowed, no code change for M4).
+Jog shows joint_delta + motor_delta and refuses < 10 motor deg with
+a warning (executed: false).
+(2) Brick: stall judged only for ports > 5 motor deg from target
+(ARRIVE_BAND_MOTOR_DEG); stopping inside the band is arrival.
+run_target/run_targets acks now carry residual(s).
+(3) check.py default speed 30 -> 200 motor deg/s.
+Tests: mini ratio asserts updated, arrival-band + min-move-warning
+tests added; full suite 422 passed, 9 pre-existing tests/gen
+failures unchanged. Brick re-copy needed: 12 .py files, 5B.13.
+
+## 5C side json files (2026-10-30, brick sw 5B.14)
+
+Manual per-brick editing of one brick.local.json was the error
+source. Replaced with brick_left.json + brick_right.json shipped in
+src/ev3/brick_mp/ (+ brick/): each main loads its own side file
+first (legacy paths still fallback) and refuses a file naming the
+other side. Old brick.local.json removed from both trees. Copy the
+whole folder to both EV3s, run left_main on the left and right_main
+on the right, no editing.
+
+## 5C jog step select (2026-10-30)
+
+Jog step now selectable (1/5/10 joint deg, default 5, clamp 10) in
+mini console; server clamp raised 5 -> 10. Reported symptom
+(move-stop-repeat even at ratio 0.1) is consistent with genuine
+stall under load: thresholds are already lenient (300 ms grace + 5
+deg arrival band), so a trip means the motor truly is not turning.
+Asked for latch_reason + moved vs motor_delta to confirm.
+
+## 5C homing generator (2026-10-30)
+
+New src/homing/plan.py: merges user config/homing.local.yaml (per
+joint: method/sensor/direction/speed) with inference (DRIVE_RATIOS
+wiring, 5A.1 trip angles J1 44 / J2 51 / J3 26 deg, J4 unverified)
+and wiring (ports.local.yaml + sensors.json). Validates before any
+motion (empty values, unknown joints/ports, bad direction/speed);
+cross-brick (J4: motor right, sensor left) warns and skips. Zero
+offsets q = ratio*m + offset recorded per joint (stall/manual give
+null/0-based); M3 writes them to the package later. Runner executes
+on fake or real transport, clears rules+latches per joint (a resting
+press would otherwise cross-latch the other brick), saves
+runs/stage5c/<date>/homing.json+md. mini gained Mark zero button +
+/api/markzero for manual joints. Fake-verified: 5 homing tests;
+suite 428 pass / 9 pre-existing gen fails.
+
+## 5C homing fake auto-trip + --only (2026-10-30)
+
+Fake runs no longer report failed for sensor joints:
+arm_fake_sensors trips each homing sensor at run start (stands in
+for a press after travel; fake motors finish in 1-2 polls) and the
+run is labeled simulated/fake in console output and homing.json/md.
+Added --only J1[,J3...] (unknown names exit 1 before motion) for
+one-joint-at-a-time physical checks. Suite green.
+
+## 5C manual inline jog (2026-10-31)
+
+J5/J6 manual prompt stalled: motors HOLD, so positioning by hand
+was impossible and a second console was needed. The prompt now
+accepts joint degrees inline (+/-N jogs at 60 motor deg/s, Enter
+marks, q skips); --auto keeps the old accept-at-once path.
+
+## 5C homing backoff + merge (2026-10-31)
+
+Real J1 run failed refused (sensor already pressed at rule time).
+Runner now backs off (opposite direction, 10 motor deg x5 max at
+30 deg/s) before arming the rule; stuck sensor fails with a clear
+message. Same-day homing.json merges by joint so --only runs
+accumulate instead of overwriting. Suite green.
+
+## 5C manual stale-latch clear (2026-10-31)
+
+Real J5/J6: a stall latch refused later jogs with its old reason
+(12.5 s elapsed), then J6 stalled genuinely 6 deg short of target
+(speed 0, motor truly blocked). Manual jog now clears the latch
+first and prints a back-off hint on guard stop. Genuine stuck
+needs backing off, not looser thresholds.
+
+## 5C backoff in joint degrees (2026-10-31)
+
+J2/J3 backoff never cleared: 5x10 motor deg is ~1-2 joint deg on
+high-ratio joints, inside the press region. Backoff now moves in
+joint-degree steps (1 deg x5, motor delta = step/|ratio|) and the
+stuck message tells the operator to check the search direction
+sign or wiring.
+
+## 5C assisted homing (2026-10-31)
+
+J2/J3 would not home by flipping the search direction. New method
+assisted: the operator jogs inline (+/-/Enter/q, like manual) until
+the sensor trips; the trip is auto-detected by polling, Enter
+requires the sensor pressed. Works cross-brick (polls, never arms
+a guard) so J4 is reachable this way too. --auto steps the search
+direction in 2 joint-deg steps up to 30 joint deg.
+
+## 5C bounded sensor stepping (2026-11-01)
+
+Blind 360-deg homing runs risked breaking the arm on a wrong
+direction. Sensor homing now steps 2 joint deg at a time (max 30
+joint deg) with the trip guard armed per step; a wrong direction
+or obstruction ends the run instead of driving through it.
+
+## 5C M3 homing complete (2026-10-31, real bricks)
+
+All 5 sensor/manual joints homed; offsets in
+runs/stage5c/2026-10-31/homing.json: J1 38.34 (sensor, dir -1,
+3 steps), J2 26.87 (sensor, dir -1, 12 steps), J3 37.28 (sensor,
+dir +1), J5 -20.0 / J6 -4.00 (manual mark). J4 skipped by design
+(cross-brick). q = ratio*m + offset verified against 5A.1 trip
+angles for J1/J2/J3. M4 (direction signs) still open.
+
+## 5C webpage exonerated for J1/J2 (2026-11-01)
+
+Sweep showed J1+J2 moving together; re-verified the web path:
+mini /api/jog sends exactly one run_target to exactly one
+brick/port (J1 -> right/outB, J2 -> left/outA; new committed
+test_jog_sends_to_exactly_one_motor), and the transport publishes
+only to robot/cmd/{brick}. The page cannot drive two joints at
+once. Cause lies downstream: mechanics, wiring, or observation.
+
+## 5C map poisoning found (2026-11-01)
+
+User screenshot proved J1 jog -> left/outA ratio 1: a stale
+Apply-map override (from combo experiments) lived in the running
+server while the repo file was clean. Also, my earlier blind
+write_file of jogmap.local.json destroyed their file without
+reading it first -- do not repeat; read-merge instead. Fixes:
+Brick/Port selects labeled Diag-only (jog always follows the map),
+new /api/jogmap/delete + Delete entry button for single-joint
+recovery, committed isolation test. Recovery: restart the server.

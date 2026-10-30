@@ -245,12 +245,17 @@ def test_firmware_stalled_missing_api_reads_false():
 def test_firmware_stall_signal_latches():
     brick = _make_core()
     brick.motors["outA"]._dev.fake_stalled = True
+    # Long move: the sustained firmware signal outlasts the 300 ms
+    # start grace plus the 200 ms continuous-signal level.
     ack = brick.handle({"id": "1", "cmd": "run_target",
-                        "args": {"port": "outA", "target": 40.0,
-                                 "speed": 250.0}})
+                        "args": {"port": "outA", "target": 400.0,
+                                 "speed": 60.0}})
     assert not ack.ok
     assert brick.guards.latched
-    assert brick.guards.latch_reason == "stall:outA"
+    reason = brick.guards.latch_reason
+    assert reason.startswith("stall:outA")
+    for field in ("target=", "position=", "speed=", "elapsed_ms="):
+        assert field in reason
 
 
 def test_stall_with_brake_eio_survives():
@@ -267,7 +272,10 @@ def test_stall_with_brake_eio_survives():
                                  "speed": 30.0}})
     assert not ack.ok and "guard stop" in ack.error
     assert brick.guards.latched
-    assert brick.guards.latch_reason == "stall:outA"
+    reason = brick.guards.latch_reason
+    assert reason.startswith("stall:outA")
+    for field in ("target=", "position=", "speed=", "elapsed_ms="):
+        assert field in reason
     assert any(e.event == "motor_error"
                for e in brick.pending_events)
 

@@ -12,6 +12,9 @@ payloads are unchanged (`docs/protocol.md`).
 - `core.py`, `guards.py`, `motors.py`, `sensors.py` — shared logic and HAL.
 - `link.py` — mailbox boxes plus `FakeLink` for PC-side tests.
 - `clock.py`, `config.py` — wrap-safe timing, JSON config loader.
+- `brick_left.json`, `brick_right.json` — per-side wiring. No
+  editing: copy the whole folder to both bricks, run `left_main.py`
+  on the left and `right_main.py` on the right.
 
 On the brick the modules live flat in one directory, so sibling imports
 use plain top-level names (`import clock`, not package paths).
@@ -47,14 +50,12 @@ Copy these files flat to the same folder on each brick via VS Code
 - LEFT brick: `clock.py`, `config.py`, `core.py`, `display.py`,
   `guards.py`, `link.py`, `log.py`, `motors.py`, `sensors.py`,
   `version.py`, **`left_main.py`** (run this),
-  `brick.local.json` (edited: `"brick": "left"`, left wiring only),
+  `brick_left.json`, `brick_right.json` (both copied, no editing),
   plus the `umqtt/` folder (`simple.py`, `__init__.py`).
-- RIGHT brick: `clock.py`, `config.py`, `core.py`, `display.py`,
-  `guards.py`, `link.py`, `log.py`, `motors.py`, `sensors.py`,
-  `version.py`, **`right_main.py`** (run this),
-  `brick.local.json` (edited: `"brick": "right"`, right wiring only).
+- RIGHT brick: same files, run **`right_main.py`** (it reads
+  `brick_right.json`; nothing to edit).
 
-Both mains print `brick sw version: 5B.9` as their first line, and
+Both mains print `brick sw version: 5B.14` as their first line, and
 every copied file carries the same `# brick-sw-version:` marker, so a
 stale copy is visible immediately. After any brick-side change: bump
 the version in `version.py` plus all markers, then re-copy all files.
@@ -75,13 +76,14 @@ left connects to PC `192.168.35.151:1883` (`HUB_ADDRESS` in
 `left_main.py`), right connects to Bluetooth name `ev3dev`
 (`MASTER_BT_NAME` in `right_main.py`).
 
-Start from `config/brick.local.json.example` for both configs. No
-account or password anywhere: the broker takes anonymous clients.
-The JSON is optional: when neither `config/brick.local.json` nor flat
-`brick.local.json` exists, each main uses its built-in wiring
-(`DEFAULT_CONFIG`) and says so on the console. A present but broken
-file still fails loudly. (If neither exists the loader error lists
-both tried paths plus the files actually in the folder.)
+No editing, no accounts or passwords anywhere: the broker takes
+anonymous clients. Each main reads its own side file
+(`brick_left.json` / `brick_right.json`) and refuses a file naming
+the other side, so a wrong copy fails loudly instead of joining the
+wrong link. Legacy `config/brick.local.json` / flat
+`brick.local.json` are still tried as fallback. When no file exists
+at all, each main uses its built-in wiring (`DEFAULT_CONFIG`) and
+says so on the console.
 
 Run order:
 

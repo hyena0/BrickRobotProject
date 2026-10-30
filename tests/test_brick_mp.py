@@ -102,6 +102,23 @@ def test_config_flat_fallback_next_to_program(tmp_path, monkeypatch):
     assert loaded["brick"] == "right"
 
 
+def test_config_side_files_need_no_editing():
+    left = BRICK_MP / "brick_left.json"
+    right = BRICK_MP / "brick_right.json"
+    assert json.loads(left.read_text())["brick"] == "left"
+    assert json.loads(right.read_text())["brick"] == "right"
+    loaded_left = brick_config.load_brick_config([str(left)], "left")
+    assert loaded_left["brick"] == "left"
+    assert len(loaded_left["motors"]) == 4
+    loaded_right = brick_config.load_brick_config([str(right)], "right")
+    assert loaded_right["brick"] == "right"
+    assert len(loaded_right["motors"]) == 2
+    with pytest.raises(ValueError):
+        brick_config.load_brick_config([str(left)], "right")
+    with pytest.raises(ValueError):
+        brick_config.load_brick_config([str(right)], "left")
+
+
 # -- guards -----------------------------------------------------------------
 
 
@@ -523,3 +540,143 @@ def test_no_banned_syntax_or_imports():
                                              ast.AsyncFunctionDef))
                                for p in parents[node]), (
                         "%s: hw import outside function" % path.name)
+
+
+# -- stall verdict timing (5C fix) ---------------------------------------------
+
+
+class _ScriptedMotor:
+    """Motor stub with scripted motion and firmware-stall signal.
+
+    stuck_polls: polls with zero speed before reaching the target.
+    step: degrees added to the position per poll (0 = fully stuck).
+    fw: list of firmware-stalled readings consumed per poll.
+    """
+
+    def __init__(self, port, stuck_polls, step=0.0, fw=(), start=0.0):
+        self.port = port
+        self._pos = float(start)
+        self._target = float(start)
+        self._stuck = stuck_polls
+        self._step = float(step)
+        self._fw = list(fw)
+        self.stopped = False
+
+    def position(self):
+        return self._pos
+
+    def start_move(self, target, speed):
+        self._target = float(target)
+
+    def is_moving(self):
+        return self._stuck > 0 and not self.stopped
+
+    def firmware_stalled(self):
+        if self._fw:
+            return bool(self._fw.pop(0))
+        return False
+
+    def wait_done(self, timeout_s):
+        if self._stuck > 0:
+            self._stuck -= 1
+            self._pos += self._step
+            return False
+        return True
+
+    def stop(self):
+        self.stopped = True
+
+    def run_angle(self, angle, speed, pump):
+        before = self._pos
+        self._pos = before + float(angle)
+        return (before, self._pos)
+
+    def reset_offset(self):
+        self._pos = 0.0
+
+
+def _scripted_core(stuck_polls, step=0.0, fw=(), start=0.0):
+    return core.BrickCore(
+        "left",
+        {"outA": _ScriptedMotor("outA", stuck_polls, step, fw, start)},
+        {"in1": sensors.FakeSensor("in1", 0)},
+    )
+
+
+def test_hold_at_target_reports_no_stall():
+    brick = make_core()
+    first = brick.handle({"id": "1", "cmd": "run_target",
+                          "args": {"port": "outA", "target": 20.0}})
+    assert first.ok and not brick.guards.latched
+    # Same goal again: skipped, never judged.
+    again = brick.handle({"id": "2", "cmd": "run_target",
+                          "args": {"port": "outA", "target": 20.0}})
+    assert again.ok and again.result.get("skipped")
+    assert not brick.guards.latched
+    # Idle HOLD polling with zero speed must never latch.
+    for _ in range(50):
+        brick.poll_idle_guards()
+    assert not brick.guards.latched
+    assert brick.guards.latch_reason == ""
+
+
+def test_no_stall_verdict_during_start_grace():
+    # Stuck ~350 ms then completes: the first 300 ms are grace, the
+    # remaining ~50 ms are far below the 300 ms trip level.
+    brick = _scripted_core(stuck_polls=35)
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 20.0,
+                                 "speed": 60.0}})
+    assert ack.ok, ack.error
+    assert not brick.guards.latched
+
+
+def test_firmware_stall_needs_200ms_continuous():
+    # Moving motor (no speed stall), firmware True for ~100 ms then
+    # False: must not latch.
+    brick = _scripted_core(stuck_polls=60, step=5.0,
+                           fw=[True] * 10 + [False] * 50)
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 1000.0,
+                                 "speed": 60.0}})
+    assert ack.ok
+    assert not brick.guards.latched
+    # Same but firmware True for ~300 ms: latches with context.
+    brick = _scripted_core(stuck_polls=60, step=5.0, fw=[True] * 30)
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 1000.0,
+                                 "speed": 60.0}})
+    assert not ack.ok and "guard stop" in ack.error
+    reason = brick.guards.latch_reason
+    assert reason.startswith("stall:outA")
+    for field in ("target=", "position=", "speed=", "elapsed_ms="):
+        assert field in reason
+
+
+def test_arrival_band_counts_as_reached():
+    # Stuck 3 motor-deg short of target: inside the 5 deg band, so
+    # stopping there is arrival, not stall; residual is recorded.
+    brick = _scripted_core(stuck_polls=100, start=17.0)
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 20.0,
+                                 "speed": 60.0}})
+    assert ack.ok, ack.error
+    assert not brick.guards.latched
+    assert abs(ack.result["residual"] - -3.0) < 1e-9
+
+
+def test_stall_latch_reason_carries_context():
+    # Fully stuck motor: trips after grace + timeout; the reason must
+    # carry port, target, actual position, speed and elapsed time.
+    brick = _scripted_core(stuck_polls=1000)
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 45.0,
+                                 "speed": 60.0}})
+    assert not ack.ok and "guard stop" in ack.error
+    reason = brick.guards.latch_reason
+    assert reason.startswith("stall:outA")
+    assert "target=45.0" in reason
+    assert "position=" in reason
+    assert "speed=" in reason
+    assert "elapsed_ms=" in reason
+    assert brick.snapshot()["latch_reason"] == reason

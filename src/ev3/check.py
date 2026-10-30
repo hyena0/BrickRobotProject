@@ -10,7 +10,8 @@ motors/sensors + fake mailbox relay)::
     python -m src.ev3.check --fake
 
 Checks: ping both bricks, print ``info`` (expect 6 motors, 5 sensors
-total), jog each motor ±10 deg at low speed, read back, report error and
+total), jog each motor ±10 deg at the default jog speed (200 deg/s
+motor), read back, report error and
 round-trip latency per brick (master and slave separately), print live
 sensor values, press each touch sensor and confirm the event, then
 measure cross-brick stop latency (sensor on one brick stopping the
@@ -58,7 +59,7 @@ def _wait_for(events: queue.Queue, pred, timeout_s: float):
             return evt
 
 
-def check_driver(driver, jog_deg: float = 10.0, speed: float = 30.0,
+def check_driver(driver, jog_deg: float = 10.0, speed: float = 200.0,
                  event_timeout_s: float = 30.0,
                  auto_press=None, do_cross_brick: bool = True) -> dict:
     """Run the Stage 5B exit-check sequence. Returns a result dict.
@@ -333,7 +334,7 @@ def main() -> None:
     parser.add_argument("--fake", action="store_true",
                         help="run against in-memory fake bricks")
     parser.add_argument("--jog-deg", type=float, default=10.0)
-    parser.add_argument("--speed", type=float, default=30.0)
+    parser.add_argument("--speed", type=float, default=200.0)
     parser.add_argument("--event-timeout", type=float, default=30.0,
                         help="per-sensor press timeout in seconds (real HW)")
     parser.add_argument("--no-cross-brick", action="store_true",

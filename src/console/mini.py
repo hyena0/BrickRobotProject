@@ -31,11 +31,29 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 JOG_STEP_DEG = 5.0
+MAX_JOG_STEP_DEG = 30.0
 JOG_SPEED_DEG_S = 250.0
 DIAG_ANGLE_DEG = 360.0
 DIAG_SPEED_DEG_S = 90.0
 HOME_SPEED_DEG_S = 30.0
 HOME_SEARCH_DEG = 360.0
+MIN_MOVE_MOTOR_DEG = 10.0
+
+# Physical joint-to-motor ratios (joint_deg = ratio * motor_deg, so
+# motor_deg = joint_deg / ratio) from runs/stage3/pred_C.json (C_raw
+# drive coefficients, model-derived). J2 has no model ratio (drive
+# break) and carries the section-4 fallback as a TEMPORARY value.
+# Signs are re-checked in M4: flip one per joint via
+# config/jogmap.local.json, e.g. {"J2": {"ratio": 0.0238}}, no code
+# change needed. Joints missing here fall back to the model ratio.
+DRIVE_RATIOS = {
+    "J1": -0.0857,
+    "J2": -0.0238,
+    "J3": -0.0343,
+    "J4": 0.2,
+    "J5": -0.2,
+    "J6": -0.1429,
+}
 
 
 def default_override_path():
@@ -87,11 +105,14 @@ def load_jog_map(model_path=None, overrides=None):
     """Joint -> drive-motor map from the kinematic model.
 
     Returns ``{joint_id: {"motor_uid", "brick", "port", "ratio"}}``
-    where ``motor_deg = joint_deg / ratio`` (drive column of C, the
-    max-``|C|`` entry per joint row). Raises ``ValueError`` when a
-    joint row has no drive motor. ``overrides`` (``{joint: patch}``,
-    as saved by the map editor) wins over the model; invalid entries
-    are skipped so a hand-edited file cannot break startup.
+    where ``motor_deg = joint_deg / ratio``. Wiring (motor, brick,
+    port) comes from the drive column of C (the max-``|C|`` entry per
+    joint row); the ratio itself comes from ``DRIVE_RATIOS`` (real
+    gear ratios) with the model ratio as fallback. Raises
+    ``ValueError`` when a joint row has no drive motor.
+    ``overrides`` (``{joint: patch}``, as saved by the map editor)
+    wins over both; invalid entries are skipped so a hand-edited
+    file cannot break startup.
     """
     from src.kin.model import chain_order, coupling, load_model
 
@@ -109,9 +130,10 @@ def load_jog_map(model_path=None, overrides=None):
     for i, joint in enumerate(chain_order(doc)):
         row = c[i]
         drive = max(range(len(row)), key=lambda j: abs(row[j]))
-        ratio = float(row[drive])
-        if ratio == 0.0:
+        model_ratio = float(row[drive])
+        if model_ratio == 0.0:
             raise ValueError(f"joint row {i} has no drive motor")
+        ratio = DRIVE_RATIOS.get(joint["id"], model_ratio)
         uid = motor_ids[drive]
         act = act_by_id.get(uid, {})
         port = str(act.get("port", "A"))
@@ -153,12 +175,13 @@ Joint <select id="joint"><option>J1</option><option>J2</option><option>J3</optio
 <p>
 Brick <select id="brick"><option>left</option><option>right</option></select>
 Port <select id="port"><option>outA</option><option>outB</option><option>outC</option><option>outD</option></select>
-(for hardware diagnostics)
+<strong>Diag only &mdash; Jog and Home always use the joint map below, never these.</strong>
 </p>
 <p>
 Ratio <input id="ratio" type="number" step="any" value="1" style="width: 6em">
 <button data-act="map-set" title="apply brick/port/ratio to the selected joint">Apply map</button>
 <button data-act="map-show" title="show current joint map">Show map</button>
+<button data-act="map-del" title="delete this joint's override">Delete entry</button>
 <button data-act="map-reset" title="restore model ratios">Reset map</button>
 </p>
 <p>
@@ -167,12 +190,16 @@ Direction <select id="direction"><option value="-1">-1</option><option value="+1
 <button data-act="home" title="drive the joint toward its sensor">Home joint</button>
 </p>
 <p>
+Step <select id="step"><option>1</option><option selected>5</option><option>10</option><option>30</option></select>&deg; (joint)
+</p>
+<p>
 <button data-act="ping">Ping</button>
 <button data-act="info">Info</button>
 <button data-act="state">Read state</button>
-<button data-act="jog+" title="jog +5 joint deg">Jog +5&deg;</button>
-<button data-act="jog-" title="jog -5 joint deg">Jog &minus;5&deg;</button>
+<button data-act="jog+" title="jog +step joint deg">Jog +</button>
+<button data-act="jog-" title="jog -step joint deg">Jog &minus;</button>
 <button data-act="diag" title="run_angle(360, 90) on the selected port">Diag 360&deg;</button>
+<button data-act="markzero" title="record current position as joint 0">Mark zero</button>
 <button data-act="stop">Stop</button>
 <button data-act="estop" class="estop">E-STOP</button>
 <button data-act="clear" title="clear guard latch">Clear latch</button>
@@ -189,21 +216,24 @@ async function call(path, body) {
 }
 document.querySelectorAll("button").forEach(b => b.onclick = () => {
   const joint = document.getElementById("joint").value;
+  const step = parseFloat(document.getElementById("step").value) || 5;
   const sel = {brick: document.getElementById("brick").value,
                port: document.getElementById("port").value};
   const a = b.dataset.act;
   if (a === "ping") call("/api/ping");
   else if (a === "info") call("/api/info");
   else if (a === "state") call("/api/state");
-  else if (a === "jog+") call("/api/jog", {joint, delta: 5});
-  else if (a === "jog-") call("/api/jog", {joint, delta: -5});
+  else if (a === "jog+") call("/api/jog", {joint, delta: step});
+  else if (a === "jog-") call("/api/jog", {joint, delta: -step});
   else if (a === "map-set") call("/api/jogmap/set",
     {...sel, joint, ratio: parseFloat(document.getElementById("ratio").value)});
   else if (a === "map-show") call("/api/jogmap");
+  else if (a === "map-del") call("/api/jogmap/delete", {joint});
   else if (a === "map-reset") call("/api/jogmap/reset");
   else if (a === "home") call("/api/home",
     {joint, sensor: document.getElementById("sensor").value,
      direction: parseInt(document.getElementById("direction").value)});
+  else if (a === "markzero") call("/api/markzero", {joint});
   else if (a === "diag") call("/api/diag", sel);
   else if (a === "stop") call("/api/stop");
   else if (a === "estop") call("/api/estop");
@@ -220,6 +250,7 @@ class _Handler(BaseHTTPRequestHandler):
     jog_map = None
     jog_overrides = None
     override_path = None
+    zeros = None
 
     def log_message(self, *args):
         pass
@@ -290,9 +321,21 @@ class _Handler(BaseHTTPRequestHandler):
             brick, port = entry["brick"], entry["port"]
             ratio = entry["ratio"]
             joint_delta = float(args.get("delta", JOG_STEP_DEG))
-            joint_delta = max(-JOG_STEP_DEG,
-                              min(JOG_STEP_DEG, joint_delta))
+            joint_delta = max(-MAX_JOG_STEP_DEG,
+                              min(MAX_JOG_STEP_DEG, joint_delta))
             motor_delta = joint_delta / ratio
+            if abs(motor_delta) < MIN_MOVE_MOTOR_DEG:
+                return {"joint": args["joint"],
+                        "joint_delta": joint_delta,
+                        "ratio": ratio, "motor_uid": entry["motor_uid"],
+                        "brick": brick, "port": port,
+                        "motor_delta": motor_delta,
+                        "speed": JOG_SPEED_DEG_S,
+                        "executed": False,
+                        "warning": "motor move "
+                        + str(round(motor_delta, 2)) + " deg < "
+                        + str(MIN_MOVE_MOTOR_DEG)
+                        + " deg minimum; not executed"}
             before = t.send(brick, "read")["encoders"].get(port, 0.0)
             target = before + motor_delta
             t.move_motors({(brick, port): target},
@@ -303,6 +346,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "brick": brick, "port": port,
                     "motor_delta": motor_delta, "motor_target": target,
                     "speed": JOG_SPEED_DEG_S,
+                    "executed": True,
                     "before": before, "after": after,
                     "moved": after - before}
         if path == "/api/jogmap":
@@ -336,6 +380,34 @@ class _Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             return {"jog_map": self.jog_map, "overrides": {}}
+        if path == "/api/jogmap/delete":
+            joint = args["joint"]
+            if joint not in self.jog_map:
+                raise KeyError("unknown joint: " + str(joint))
+            self.jog_overrides.pop(joint, None)
+            fresh = load_jog_map(overrides=self.jog_overrides)
+            self.jog_map.clear()
+            self.jog_map.update(fresh)
+            pathlib.Path(self.override_path).write_text(
+                json.dumps(self.jog_overrides, indent=1),
+                encoding="utf-8")
+            return {"joint": joint, "jog_map": self.jog_map,
+                    "overrides": self.jog_overrides}
+        if path == "/api/markzero":
+            entry = self.jog_map[args["joint"]]
+            brick, port = entry["brick"], entry["port"]
+            ratio = entry["ratio"]
+            pos = float(t.send(brick, "read")["encoders"].get(port, 0.0))
+            offset = -ratio * pos
+            if self.zeros is None:
+                self.zeros = {}
+            self.zeros[args["joint"]] = {"motor_position": pos,
+                                         "ratio": ratio,
+                                         "offset": offset}
+            return {"joint": args["joint"], "brick": brick,
+                    "port": port, "motor_position": pos,
+                    "ratio": ratio, "offset": offset,
+                    "zeros": self.zeros}
         if path == "/api/home":
             entry = self.jog_map[args["joint"]]
             brick, port = entry["brick"], entry["port"]
@@ -376,12 +448,13 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def create_server(transport, host="127.0.0.1", port=8765,
-                  jog_map=None, override_path=None):
+                  jog_map=None, override_path=None, zeros=None):
     """Create (not start) the console server for ``transport``.
 
     Saved overrides from ``override_path`` (default
     ``config/jogmap.local.json``) apply on top of the model map. An
     explicitly passed ``jog_map`` is used as-is with no overrides.
+    ``zeros`` holds mark-zero offsets per joint (starts empty).
     """
     if override_path is None:
         override_path = default_override_path()
@@ -390,10 +463,13 @@ def create_server(transport, host="127.0.0.1", port=8765,
         jog_map = load_jog_map(overrides=overrides)
     else:
         overrides = {}
+    if zeros is None:
+        zeros = {}
     handler = type("MiniHandler", (_Handler,),
                    {"transport": transport, "jog_map": jog_map,
                     "jog_overrides": overrides,
-                    "override_path": str(override_path)})
+                    "override_path": str(override_path),
+                    "zeros": zeros})
     return ThreadingHTTPServer((host, port), handler)
 
 
