@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Hackathon project: a Muse Spark agent infers a LEGO robot's kinematic chain from brick-level Studio data and generates FK/IK and EV3 control code. Full plan: `PLAN.md`. Detailed stage plans: `docs/stages/` (work only on the stage and task you are given).
+Hackathon project: a Muse Spark agent infers a LEGO robot's kinematic chain from brick-level Studio data and generates FK/IK and EV3 control code. Full plan: `PLAN.md` (v1) with updates in `PLAN.v2.md` (v2 wins where they differ). Detailed stage plans: `docs/stages/` (work only on the stage and task you are given).
 
 ## Language
 
@@ -10,12 +10,13 @@ Hackathon project: a Muse Spark agent infers a LEGO robot's kinematic chain from
 ## Hard rules
 
 1. **New work only.** Do not copy code from any earlier project. Write everything fresh in this repo.
-2. **Never commit appearance or assembly data.** `.io`, `.ldr`, `.mpd`, renders and mesh-based MJCF live in `assets/private/` or `eval/ground_truth/` (git-ignored). Agent logs and tool outputs with part IDs/poses go to `runs/` (git-ignored). Only abstract kinematics (axes, link dimensions, gear ratios, coupling, limits), IK code/weights, primitive-geometry MJCF and generated EV3 code may be committed. See `PLAN.md` section 4a.
+2. **Never commit appearance or assembly data.** `.io`, `.ldr`, `.mpd`, renders and mesh-based MJCF live in `assets/private/` or `eval/ground_truth/` (git-ignored). Agent logs and tool outputs with part IDs/poses go to `runs/` (git-ignored). Only abstract kinematics (axes, link dimensions, gear ratios, coupling, limits), IK code/weights, primitive-geometry MJCF and generated EV3 code may be committed. See `PLAN.md` section 4a. Real LEGO meshes for development, testing and video live only in the private visual pack `assets/private/visual_pack/` and are served only behind `--private-visuals`; `python -m src.release.check` must pass before any release.
 3. **Never commit secrets.** API keys come from environment variables (`META_API_KEY`, `MODEL_API_KEY`). `.env` is git-ignored.
-4. **Ground truth stays out of the agent.** Files in `eval/ground_truth/` and `gt/` (including `gt/gt_joints.json`) are for the verifier only. Never pass their contents (joint lists, gear ratios, link segmentation, link lengths) into agent prompts or tool outputs. A `gt/` path reaches code only as a scorer CLI argument (`--gt`); extraction/inference code under `src/` (everything except `src/verify/`) must not import or read it — pinned by `tests/test_gt_isolation.py`.
+4. **Ground truth stays out of the agent.** Files in `eval/ground_truth/` are for the verifier only. Never pass their contents (joint lists, gear ratios, link segmentation, link lengths) into agent prompts or tool outputs.
 5. **No Streamlit.** No dashboard as a main feature.
 6. Do not commit, push or amend unless asked.
-7. **BrickRobotProject only.** An extraction session works only inside this repository. Never read, list, or depend on files outside it.
+7. **Local-only hardware and console.** The MQTT broker runs on the hub device (the PC for the hackathon; no cloud or public brokers), with authentication (`hub`, `brick_left` accounts) and topic ACLs. Bricks read the hub address from config. Console and brick code make no internet requests; all web assets are vendored locally (no CDNs, no web fonts). Meta API calls are allowed only in Stage 6 modules.
+8. **Controller package layering.** Code in `src/core/` must not call files, network, OS, MuJoCo or web frameworks directly; all I/O goes through the adapter interfaces in `src/core/ports.py`. The robot package (`packages/<robot>/robot_package.json`) is the only runtime input from the authoring tools. The UI contains no kinematics or safety logic. Any change to core behaviour must keep `conformance/` passing (regenerate golden cases only on purpose and log why).
 
 ## Architecture
 
@@ -34,14 +35,26 @@ src/
   ev3/       brick programs (master: Wi-Fi MQTT, slave: Bluetooth via master),
              on-brick safety guards, host driver (ports only, protocol in docs/protocol.md)
   viz/       Blender scene import and link/axis overlays (renders stay private)
-  demo/      O/X demos (physical + simulation)
+  limits/    joint limits from sensor geometry, collisions and coupled constraints
+  package/   robot package builder and loader (authoring → runtime contract)
+  core/      platform-neutral controller core: FK/IK, limits, path check, motion,
+             homing, wizard state machines, protocol; adapter interfaces in ports.py
+  adapters/  platform adapters; pc/: MQTT transport, MuJoCo sim transport,
+             file storage, process lifecycle
+  console/   PC UI bridge (FastAPI + WebSocket shell, no robot logic), CLI wizards
+  ui/        shared web UI (plain HTML/JS + three.js vendored in ui/vendor/, no Streamlit)
+  demo/      pointing demos (physical + simulation)
   vla/       demo generation + LeRobot conversion + Modal training (stretch)
   gen/       procedural LDraw arm generator (generalization tests)
 models/              public primitive-geometry MJCF
+packages/<robot>/    robot packages (abstract data only, versioned)
+conformance/         golden cases exported from the Python core + runner (porting contract)
 config/*.local.yaml  hardware, port wiring (motor/sensor uid → port, no joint names)
                      and zero offsets (git-ignored, human-provided)
 eval/ground_truth/   ground-truth kinematics, segmentation, MJCF (verifier only)
 docs/schema.md       kinematic model JSON schema
+docs/robot_package.md  robot package schema
+docs/protocol.md     MQTT protocol (platform-neutral contract)
 docs/stages/         stage plans and LOG.md
 ```
 
@@ -71,19 +84,9 @@ docs/stages/         stage plans and LOG.md
 ## Commands
 
 ```bash
-python -m src.parse.ldr assets/private/model.ldr -o runs/<id>/parts.json  # parse
-python -m src.catalog.draft runs/<id>/parts.json -o src/catalog/parts.yaml  # catalog draft
-python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --ports config/ports.local.yaml  # wiring check
-python -m src.agent.run --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --run-id <id> --heuristic  # stage-2 baseline
-python -m src.verify.segmentation --pred runs/<id>/links_joints.json --gt eval/ground_truth/segmentation.json  # link score
-python -m src.verify.joints --pred runs/<id>/links_joints_public.json --gt gt/gt_joints.json  # joint score
-python -m src.viz.overlay --pred runs/<id>/links_joints.json -o runs/<id>/overlay.json  # Blender overlay data
-python -m src.agent.sensors --parts runs/<id>/parts.json --links runs/<id>/links_joints.json --ports config/ports.local.yaml -o runs/<id>/sensors.json  # sensor-joint association
+python -m src.agent.run --model-file assets/private/<robot>.io   # run inference
+python -m src.verify.run --pred runs/<id>/kinematics.json         # verify
 python -m src.ev3.check                                           # EV3 connectivity
-python -m src.kin.assemble --joints runs/<id>/links_joints_public.json --coupling runs/stage3/pred_C.json --ports config/ports.local.yaml --parts runs/stage1/parts.json --catalog src/catalog/parts.yaml --out models/robot_inferred.json  # assemble model
-python -m src.kin.mjcf --model models/robot_inferred.json --out models/robot_inferred.xml  # primitive MJCF
-python -m src.kin.fk --model models/robot_inferred.json --q 0,0,0,0,0,0  # FK pose
-python -m src.verify.ik_eval --pred models/robot_inferred.json --gt eval/ground_truth/kinematics_gt.json --n 500  # Gate 2 (GT-blind)
 ```
 
 Update this section when commands change.

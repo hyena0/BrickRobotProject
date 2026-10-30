@@ -62,8 +62,9 @@ class FakeMotor(Motor):
         return self._moving
 
     def wait_done(self, timeout_s: float) -> bool:
-        self._pos = self._target
-        self._moving = False
+        if self._moving:
+            self._pos = self._target
+            self._moving = False
         return True
 
     def stop(self) -> None:

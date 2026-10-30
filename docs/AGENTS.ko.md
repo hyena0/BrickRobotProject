@@ -2,7 +2,7 @@
 
 > 이 파일은 참고용 한국어 번역입니다. Muse Code가 실제로 읽는 파일은 영어 `AGENTS.md`입니다. 규칙을 바꿀 때는 두 파일을 함께 수정하세요.
 
-해커톤 프로젝트: Muse Spark 에이전트가 브릭 단위 스튜디오 데이터에서 레고 로봇의 기구학 체인을 추론하고, FK/IK와 EV3 제어 코드를 생성합니다. 전체 계획: `PLAN.md`. 단계별 세부 계획: `docs/stages/` (지시받은 단계와 작업만 진행).
+해커톤 프로젝트: Muse Spark 에이전트가 브릭 단위 스튜디오 데이터에서 레고 로봇의 기구학 체인을 추론하고, FK/IK와 EV3 제어 코드를 생성합니다. 전체 계획: `PLAN.md`(v1)와 업데이트 `PLAN.v2.md` (두 문서가 다르면 v2를 따름). 단계별 세부 계획: `docs/stages/` (지시받은 단계와 작업만 진행).
 
 ## 언어
 
@@ -12,12 +12,13 @@
 ## 반드시 지킬 규칙
 
 1. **새 작업만.** 이전 프로젝트의 코드를 복사하지 않습니다. 이 저장소에서 모두 새로 작성합니다.
-2. **외형과 조립 데이터는 절대 커밋하지 않습니다.** `.io`, `.ldr`, `.mpd`, 렌더, 메시가 들어간 MJCF는 `assets/private/` 또는 `eval/ground_truth/`에 둡니다(git 제외). 부품 번호와 위치가 담긴 에이전트 로그와 도구 출력은 `runs/`에 둡니다(git 제외). 커밋할 수 있는 것은 추상 기구학(관절축, 링크 치수, 기어비, 연동, 가동 범위), IK 코드와 가중치, 기본 도형 MJCF, 생성된 EV3 코드뿐입니다. `PLAN.md` 4a절 참고.
+2. **외형과 조립 데이터는 절대 커밋하지 않습니다.** `.io`, `.ldr`, `.mpd`, 렌더, 메시가 들어간 MJCF는 `assets/private/` 또는 `eval/ground_truth/`에 둡니다(git 제외). 부품 번호와 위치가 담긴 에이전트 로그와 도구 출력은 `runs/`에 둡니다(git 제외). 커밋할 수 있는 것은 추상 기구학(관절축, 링크 치수, 기어비, 연동, 가동 범위), IK 코드와 가중치, 기본 도형 MJCF, 생성된 EV3 코드뿐입니다. `PLAN.md` 4a절 참고. 개발·테스트·영상용 실제 레고 메시는 비공개 시각 팩 `assets/private/visual_pack/`에만 두고 `--private-visuals` 옵션에서만 제공합니다. 배포 전에는 `python -m src.release.check`가 반드시 통과해야 합니다.
 3. **비밀 정보는 절대 커밋하지 않습니다.** API 키는 환경 변수(`META_API_KEY`, `MODEL_API_KEY`)에서 읽습니다. `.env`는 git에서 제외합니다.
-4. **정답지는 에이전트에게 주지 않습니다.** `eval/ground_truth/`와 `gt/`(`gt/gt_joints.json` 포함)의 파일은 검증기 전용입니다. 그 내용(관절 목록, 기어비, 링크 분할, 링크 길이)을 에이전트 프롬프트나 도구 출력에 넣지 않습니다. `gt/` 경로는 채점기 실행 인자(`--gt`)로만 전달합니다. `src/`의 추출·추론 코드(`src/verify/` 제외)는 import하거나 읽으면 안 됩니다(`tests/test_gt_isolation.py`로 고정).
+4. **정답지는 에이전트에게 주지 않습니다.** `eval/ground_truth/`의 파일은 검증기 전용입니다. 그 내용(관절 목록, 기어비, 링크 분할, 링크 길이)을 에이전트 프롬프트나 도구 출력에 넣지 않습니다.
 5. **Streamlit 사용 금지.** 대시보드를 핵심 기능으로 만들지 않습니다.
 6. 요청이 없으면 커밋, 푸시, amend를 하지 않습니다.
-7. **작업 범위는 BrickRobotProject 한정.** 추출 세션은 이 저장소 안에서만 작업합니다. 외부 파일을 읽거나, 나열하거나, 의존하지 않습니다.
+7. **하드웨어와 콘솔은 로컬 전용.** MQTT 브로커는 허브 기기(해커톤에서는 PC)에서 실행하고(클라우드·공개 브로커 사용 금지), 인증(`hub`, `brick_left` 계정)과 토픽 권한을 설정합니다. 브릭은 허브 주소를 설정에서 읽습니다. 콘솔과 브릭 코드는 인터넷 요청을 하지 않고, 모든 웹 자원은 저장소에 넣어 로컬에서 제공합니다(CDN·웹 폰트 금지). Meta API 호출은 6단계 모듈에서만 허용합니다.
+8. **컨트롤러 패키지 계층 분리.** `src/core/`의 코드는 파일, 네트워크, OS, MuJoCo, 웹 프레임워크를 직접 호출하지 않고, 모든 입출력은 `src/core/ports.py`의 어댑터 인터페이스를 거칩니다. 저작 도구에서 실행 환경으로 넘어가는 입력은 로봇 패키지(`packages/<robot>/robot_package.json`) 하나뿐입니다. UI에는 기구학이나 안전 로직을 넣지 않습니다. 코어 동작을 바꿀 때는 `conformance/`가 계속 통과해야 하며, 정답 사례는 의도적으로만 다시 생성하고 이유를 기록합니다.
 
 ## 구조
 
@@ -36,14 +37,26 @@ src/
   ev3/       브릭 프로그램 (마스터: Wi-Fi MQTT, 슬레이브: 마스터 경유 블루투스),
              브릭 내 안전 가드, PC 드라이버 (포트만 다룸, 프로토콜은 docs/protocol.md)
   viz/       Blender 장면 불러오기, 링크·축 표시 (렌더는 비공개)
-  demo/      O/X 데모 (실물 + 시뮬레이션)
+  limits/    센서 형상, 충돌, 관절 간 제약으로 구한 관절 범위
+  package/   로봇 패키지 빌더와 로더 (저작 → 실행 사이의 약속)
+  core/      플랫폼과 무관한 컨트롤러 코어: FK/IK, 범위, 경로 검사, 이동,
+             원점 복귀, 마법사 상태 흐름, 프로토콜. 어댑터 인터페이스는 ports.py
+  adapters/  플랫폼별 어댑터. pc/: MQTT 통신, MuJoCo 시뮬레이션 통신,
+             파일 저장, 프로세스 상태 처리
+  console/   PC용 UI 연결부 (FastAPI + WebSocket 껍데기, 로봇 로직 없음), CLI 마법사
+  ui/        공용 웹 화면 (일반 HTML/JS + ui/vendor/에 포함한 three.js, Streamlit 사용 안 함)
+  demo/      가리키기 데모 (실물 + 시뮬레이션)
   vla/       시연 생성 + LeRobot 변환 + Modal 학습 (선택)
   gen/       절차적 LDraw 팔 생성기 (일반화 시험용)
 models/              공개용 기본 도형 MJCF
+packages/<robot>/    로봇 패키지 (추상 데이터만, 버전 관리)
+conformance/         Python 코어에서 내보낸 정답 사례 + 실행기 (이식 기준)
 config/*.local.yaml  하드웨어, 포트 배선 (모터·센서 uid → 포트, 관절 이름 없음),
                      영점 오프셋 (git 제외, 사람이 제공)
 eval/ground_truth/   정답 기구학, 링크 분할, MJCF (검증기 전용)
 docs/schema.md       기구학 모델 JSON 형식
+docs/robot_package.md  로봇 패키지 형식
+docs/protocol.md     MQTT 프로토콜 (플랫폼과 무관한 약속)
 docs/stages/         단계별 계획과 LOG.md
 ```
 
@@ -73,16 +86,9 @@ docs/stages/         단계별 계획과 LOG.md
 ## 명령어
 
 ```bash
-python -m src.parse.ldr assets/private/model.ldr -o runs/<id>/parts.json  # 파싱
-python -m src.catalog.draft runs/<id>/parts.json -o src/catalog/parts.yaml  # 부품표 초안
-python -m src.tools.wiring --parts runs/<id>/parts.json --catalog src/catalog/parts.yaml --ports config/ports.local.yaml  # 배선 확인
 python -m src.agent.run --model-file assets/private/<robot>.io   # 추론 실행
 python -m src.verify.run --pred runs/<id>/kinematics.json         # 검증
 python -m src.ev3.check                                           # EV3 연결 확인
-python -m src.kin.assemble --joints runs/<id>/links_joints_public.json --coupling runs/stage3/pred_C.json --ports config/ports.local.yaml --parts runs/stage1/parts.json --catalog src/catalog/parts.yaml --out models/robot_inferred.json  # 모델 조립
-python -m src.kin.mjcf --model models/robot_inferred.json --out models/robot_inferred.xml  # 단순형상 MJCF
-python -m src.kin.fk --model models/robot_inferred.json --q 0,0,0,0,0,0  # FK 자세
-python -m src.verify.ik_eval --pred models/robot_inferred.json --gt eval/ground_truth/kinematics_gt.json --n 500  # Gate 2 (GT 블라인드)
 ```
 
 명령어가 바뀌면 이 절을 업데이트합니다.

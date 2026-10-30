@@ -140,19 +140,56 @@ def _errors(q, axes, points, ee, pos_t, rot_t):
     return pe, re
 
 
+def _coupled_ok(q_deg, joint_ids, coupled, lookup=None) -> bool:
+    """Stage 5A box-external check: linear inequalities hold.
+
+    Lookup tables stay implemented but switched off
+    (USE_COUPLED_LOOKUP): only limits_deg and coupled_limits gate.
+    """
+    from src.limits.enforce import USE_COUPLED_LOOKUP, check_lookup
+    pos = {jid: v for jid, v in zip(joint_ids, q_deg)}
+    for d in coupled or []:
+        ja, jb = d["joints"]
+        val = d["a"][0] * pos[ja] + d["a"][1] * pos[jb] + d["b"]
+        if d["op"] == ">=" and val < -1e-9:
+            return False
+        if d["op"] == "<=" and val > 1e-9:
+            return False
+    if USE_COUPLED_LOOKUP and lookup and not check_lookup(
+            q_deg, joint_ids, lookup):
+        return False
+    return True
+
+
 def ik(target_pos, target_mat, doc, q_init_deg=None,
        position_only=False, n_restarts=N_RESTARTS,
-       max_restarts=32, seed=0) -> dict:
+       max_restarts=32, seed=0, limits_doc=None) -> dict:
     """Solve IK. Target pose: mm position + 3x3 rotation matrix.
 
     Returns {"q_deg", "success", "pos_err_mm", "rot_err_deg"}.
     Success uses the Gate 2 thresholds (5 mm / 3 deg). Seeds are
     added in batches until success or max_restarts is reached.
+
+    With limits_doc (Stage 5A runs/stage5a/limits.json shape:
+    limits_deg per joint plus coupled_limits/coupled_lookup),
+    seeds are drawn inside the operating ranges and
+    coupled-violating solutions are rejected, so success implies
+    a limit-safe pose.
     """
     arr = joint_arrays(doc)
     axes, points = arr["axes"], arr["points"]
     ee = ee_point(doc)
+    joint_ids = arr["ids"]
     lims = arr["limits"]
+    coupled = None
+    lookup = None
+    if limits_doc:
+        boxes = limits_doc.get("limits_deg", {})
+        lims = [[math.radians(boxes.get(jid, [-180.0, 180.0])[0]),
+                 math.radians(boxes.get(jid, [-180.0, 180.0])[1])]
+                for jid in joint_ids]
+        coupled = limits_doc.get("coupled_limits", [])
+        lookup = limits_doc.get("coupled_lookup", {})
     rng = random.Random(seed)
     seeds = []
     if q_init_deg is not None:
@@ -175,9 +212,15 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
         return ((pe, re), q, pe, re)
 
     def successful(cand) -> bool:
-        _, _, pe, re = cand
-        return pe <= SUCCESS_POS_MM and (position_only or
-                                         re <= SUCCESS_ROT_DEG)
+        _, q, pe, re = cand
+        if not (pe <= SUCCESS_POS_MM and (position_only or
+                                          re <= SUCCESS_ROT_DEG)):
+            return False
+        if (coupled or lookup) and not _coupled_ok(
+                [math.degrees(v) for v in q], joint_ids, coupled,
+                lookup):
+            return False
+        return True
 
     best = None
     randoms_used = 0
@@ -210,5 +253,10 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
                 best = cand
     (_, q, pe, re) = best
     ok = pe <= SUCCESS_POS_MM and (position_only or re <= SUCCESS_ROT_DEG)
-    return {"q_deg": [math.degrees(x) for x in q], "success": bool(ok),
-            "pos_err_mm": pe, "rot_err_deg": re}
+    q_deg = [math.degrees(x) for x in q]
+    coupled_ok = _coupled_ok(q_deg, joint_ids, coupled, lookup)
+    if (coupled or lookup) and not coupled_ok:
+        ok = False
+    return {"q_deg": q_deg, "success": bool(ok),
+            "pos_err_mm": pe, "rot_err_deg": re,
+            "coupled_ok": bool(coupled_ok)}

@@ -1,0 +1,45 @@
+# Human-provided homing calibration (Stage 5.2, git-ignored).
+# Copy to homing.local.yaml and fill in on the physical robot.
+# The generator reads it with --homing; missing file means all zeros
+# and unconfirmed search directions.
+#
+# Check with:
+#   python -m src.codegen.generate --model models/robot_inferred.json \
+#     --ports config/ports.local.yaml --sensors runs/stage5/sensors.json \
+#     --homing config/homing.local.yaml --out generated/robot_inferred
+
+# Offset from each home position to the model's zero pose, in motor
+# degrees by motor uid. Measure: home the arm, then jog each motor to
+# the Studio zero pose and record the encoder travel.
+zeros:
+  p000147: 0.0
+  p000148: 0.0
+  p000149: 0.0
+  p000736: 0.0
+  p000737: 0.0
+  p000743: 0.0
+
+# Homing search direction per joint: -1 searches toward negative motor
+# angles, +1 toward positive. Confirm in bring-up step 2 (single-joint
+# +15 deg check): a wrong sign drives the joint away from its sensor.
+homing_direction:
+  J1: -1
+  J2: -1
+  J3: -1
+  J4: -1
+  J5: -1
+  J6: -1
+
+# Set a joint to true once its direction is confirmed on hardware.
+homing_confirmed:
+  J1: false
+  J2: false
+  J3: false
+  J4: false
+  J5: false
+  J6: false
+
+# Colour sensor thresholds (uid p000489, right brick port 2). Record the
+# reflected-light reading on the homing mark vs. the bare table here.
+colour_thresholds:
+  p000489: {mark: 0, table: 0}

@@ -18,6 +18,20 @@ Stage 4 done (Gate 2 PASS): `src/kin/`
 /`.xml` (public, primitive geometry) + `src/verify/conventions.py`
 (sign guard, EE roll gauge); Gate 2 vs user GT v2 100% (median
 0.45mm, p95 0.97mm, n=500).
+Stage 5 sim-closed (user chose sim-only; hardware deferred):
+`src/codegen/` (generator + bring-up runner) +
+`config/homing.local.yaml.example` (human calibration) +
+`generated/robot_inferred/` (public package) + `runs/stage5/` run kit
+(5 coupling-consistent poses, 6 screened Cartesian targets); fake-brick
+rehearsal PASS (poses 10 moves, cartesian 6x3) + sim tip errors
+(poses 0.000mm, cartesian median 1.92mm / max 4.25mm); 148/148 tests.
+Homing directions UNCONFIRMED and zero offsets 0 until a physical run;
+blockers (no hardware.local.yaml, no broker, no brick access) in LOG.md.
+Blender pose validation (`src/viz/pose_check.py`): 10 sampled poses
+articulated from Stage 2 segmentation; support/gear/EE checks pass
+(EE <= 0.001mm vs FK), but all 10 self-collide (BVH mesh-confirmed;
+hinge neighbours + genuine folds). `poses10.json` carries per-pose
+verdicts — none qualify for physical replay; re-screen before hardware.
 
 ## Built / External / Pre-existing / Evaluation only / Human-provided
 
