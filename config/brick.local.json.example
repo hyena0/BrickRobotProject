@@ -1,0 +1,15 @@
+{
+  "_note": "Copy to brick.local.json on the brick and edit. Brick name and wiring only: hub IP is hardcoded in left_main.py, master BT name in right_main.py. Never commit the real file. The right brick uses brick right with its own wiring.",
+  "brick": "left",
+  "motors": [
+    {"port": "outA", "type": "large"},
+    {"port": "outB", "type": "large"},
+    {"port": "outC", "type": "medium"},
+    {"port": "outD", "type": "medium"}
+  ],
+  "sensors": [
+    {"port": "in1", "type": "touch"},
+    {"port": "in2", "type": "touch"},
+    {"port": "in3", "type": "touch"}
+  ]
+}

@@ -1,9 +1,10 @@
 """Motor hardware abstraction for the EV3 bricks.
 
-The brick programs stay robot-agnostic: they only know port names
-(e.g. ``outA``), never joint names or gear ratios. Real hardware access is
-isolated here so the command executor and the safety layer can be tested
-with :class:`FakeMotor` on a PC.
+Brick platform (Stage 5B): ev3dev + ``ev3dev2``. The brick programs stay
+robot-agnostic: they only know port names (e.g. ``outA``), never joint
+names or gear ratios. Real hardware access is isolated here so the
+command executor and the safety layer can be tested with
+:class:`FakeMotor` on a PC.
 """
 
 from __future__ import annotations

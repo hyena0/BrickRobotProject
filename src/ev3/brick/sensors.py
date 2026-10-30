@@ -1,6 +1,7 @@
 """Sensor hardware abstraction for the EV3 bricks.
 
-Ports only (e.g. ``in1``). The brick never learns what a sensor means.
+Brick platform (Stage 5B): ev3dev + ``ev3dev2``. Ports only (e.g.
+``in1``). The brick never learns what a sensor means.
 """
 
 from __future__ import annotations

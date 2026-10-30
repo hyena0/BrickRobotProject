@@ -1,0 +1,33 @@
+# Mosquitto broker config template for Stage 5B (hub = PC for the hackathon).
+# Committed example, no secrets. Copy to config/mosquitto.local.conf and edit:
+#
+#   cp config/mosquitto.conf.example config/mosquitto.local.conf
+#
+# Then set HUB_LAN_IP below to the hub's fixed LAN IP. No accounts, no
+# password file, no ACL file: the broker accepts anonymous clients but
+# listens on the hub LAN IP only, so it is reachable from the local LAN
+# alone. Never bind 0.0.0.0.
+#
+# Run (hub/PC):
+#
+#   mosquitto -c config/mosquitto.local.conf
+#
+# Checks (5B.1):
+#
+#   # a subscriber on the hub sees a test publish from the master:
+#   mosquitto_sub -h <HUB_LAN_IP> -p 1883 \
+#     -t 'robot/state/#' -t 'robot/ack/#' -v
+#   # on the master brick:
+#   mosquitto_pub -h <HUB_LAN_IP> -p 1883 \
+#     -t robot/state/left -m '{"brick":"left","test":1}'
+#   # the broker listens on the hub LAN IP only (no 0.0.0.0):
+#   ss -ltn | grep 1883
+#
+# Local-only policy: no router port forwarding; firewall allows port 1883
+# only from the LAN subnet. No cloud or public brokers.
+
+# Listen on the hub's LAN IP only. Replace HUB_LAN_IP with the hub's
+# fixed LAN address (e.g. 192.168.1.10). No 0.0.0.0 listener.
+listener 1883 HUB_LAN_IP
+
+allow_anonymous true

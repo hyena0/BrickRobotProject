@@ -112,7 +112,21 @@ class BrickCore:
                 rules = [SensorRule(r["sensor"], bool(r.get("invert", False)))
                          for r in args.get("rules", [])]
                 self.guards.configure(rules)
-                return Ack(mid, True, {"rules": len(rules)})
+                if "limits" in args:
+                    raw_limits = args.get("limits") or []
+                    if isinstance(raw_limits, dict):
+                        items = raw_limits.items()
+                        parsed = {p: (float(v[0]), float(v[1]))
+                                  for p, v in items}
+                    else:
+                        parsed = {e["port"]: (float(e["min"]), float(e["max"]))
+                                  for e in raw_limits}
+                    if parsed:
+                        self.guards.set_limits(parsed)
+                    else:
+                        self.guards.clear_limits()
+                return Ack(mid, True, {"rules": len(rules),
+                                       "limits": len(self.guards.limits)})
             if cmd == "clear_latch":
                 self.guards.clear_latch()
                 return Ack(mid, True, {})
@@ -133,6 +147,14 @@ class BrickCore:
                              "send clear_latch first")
         return None
 
+    def _limit_reject(self, mid: str, port: str, target: float) -> Ack:
+        self.pending_events.append(
+            GuardEvent("limit_reject", {"port": port, "target": target}))
+        lo, hi = self.guards.limits[port]
+        return Ack(mid, False,
+                   error=f"limit_reject: {port} target {target} "
+                         f"outside [{lo}, {hi}]")
+
     def _run_target(self, args: dict, mid: str) -> Ack:
         refused = self._refuse_if_latched(mid)
         if refused:
@@ -143,6 +165,8 @@ class BrickCore:
         until_sensor = args.get("until_sensor")
         if port not in self.motors:
             return Ack(mid, False, error=f"unknown port: {port!r}")
+        if not self.guards.check_limit(port, target):
+            return self._limit_reject(mid, port, target)
         homing = None
         if until_sensor:
             if until_sensor not in self.sensors:
@@ -169,6 +193,10 @@ class BrickCore:
         for mv in moves:
             if mv["port"] not in self.motors:
                 return Ack(mid, False, error=f"unknown port: {mv['port']!r}")
+            if not self.guards.check_limit(mv["port"],
+                                           float(mv["target"])):
+                return self._limit_reject(mid, mv["port"],
+                                          float(mv["target"]))
         started: list[tuple[str, float]] = []
         for mv in moves:
             port = mv["port"]
@@ -229,6 +257,21 @@ class BrickCore:
                 self.guards.latch_reason = "move_timeout"
                 self.pending_events.append(GuardEvent("stall", {"port": "timeout"}))
                 return False
+
+    def poll_idle_guards(self) -> list[GuardEvent]:
+        """Poll sensor guards outside any move (call from main loops).
+
+        Any trigger latches, stops all motors and queues the event for
+        publishing. Returns the newly queued events.
+        """
+        if self.guards.latched:
+            return []
+        snapshot = {p: s.read() for p, s in self.sensors.items()}
+        fresh = self.guards.check_sensors(snapshot, None)
+        if fresh:
+            self._stop_all()
+            self.pending_events.extend(fresh)
+        return fresh
 
     def _stop_all(self) -> None:
         for m in self.motors.values():

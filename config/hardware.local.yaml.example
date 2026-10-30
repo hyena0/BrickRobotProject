@@ -1,18 +1,26 @@
 # Human-provided hardware config (git-ignored). Copy to hardware.local.yaml.
+# Hub side (PC for the hackathon): broker address, brick names.
+# The broker takes anonymous clients (see config/mosquitto.conf.example);
+# there are no accounts or passwords anywhere in this file.
 broker: "192.168.1.10"
 broker_port: 1883
-left:   # master brick wiring (ports only, no joint names)
+# Brick names: left = master (Wi-Fi + Bluetooth relay), right = slave.
+bricks: ["left", "right"]
+left:   # master brick wiring (port to joint map lives here on the hub)
   motors:
-    - {port: "outA", type: "large"}
-    - {port: "outB", type: "large"}
-    - {port: "outC", type: "medium"}
+    - {port: "outA", type: "large"}    # J2
+    - {port: "outB", type: "large"}    # J3
+    - {port: "outC", type: "medium"}   # J4
+    - {port: "outD", type: "medium"}   # J5
   sensors:
     - {port: "in1", type: "touch"}
+    - {port: "in2", type: "touch"}
+    - {port: "in3", type: "touch"}
 master_bt_addr: "00:16:53:AA:BB:CC"  # Bluetooth address of the master (slave uses this)
-right:  # slave brick wiring (ports only)
+right:  # slave brick wiring (port to joint map lives here on the hub)
   motors:
-    - {port: "outA", type: "medium"}
-    - {port: "outB", type: "medium"}
-    - {port: "outC", type: "medium"}
+    - {port: "outA", type: "medium"}   # J6
+    - {port: "outB", type: "medium"}   # J1
   sensors:
     - {port: "in1", type: "touch"}
+    - {port: "in2", type: "color"}     # homing mark

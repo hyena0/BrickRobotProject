@@ -1,6 +1,8 @@
 # Secrets and local config
 .env
 config/*.local.yaml
+config/*.local.conf
+config/*.local.json
 
 # Private robot appearance / assembly data (see PLAN.md section 4a)
 assets/private/

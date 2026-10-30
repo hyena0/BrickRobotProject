@@ -1,14 +1,16 @@
 """Slave brick program (right brick).
 
-Bluetooth client of the master. Receives relayed command envelopes,
-executes them via :class:`BrickCore`, and returns acks, states and events
-over the same link. Local guard loops run here too: losing the master
-link stops everything on the slave.
+ev3dev + ``ev3dev2`` (Stage 5B decision): Bluetooth client of the master.
+Receives relayed command envelopes, executes them via :class:`BrickCore`,
+and returns acks, states and events over the same link. Local guard loops
+run here too: losing the master link stops everything on the slave.
+
+The brick knows ports only. Connection details (master Bluetooth address)
+come from the brick-local config, never hard-coded.
 """
 
 from __future__ import annotations
 
-import json
 import time
 
 STATE_HZ = 15.0
@@ -16,31 +18,51 @@ STATE_HZ = 15.0
 
 def build_core_from_config(wiring: dict):
     """Create a :class:`BrickCore` from a wiring dict (ports only)."""
-    from .core import BrickCore
-    from .motors import open_motor
-    from .sensors import open_sensor
+    from .config import build_core_from_wiring
 
-    motors = {m["port"]: open_motor(m["port"], m.get("type", "medium"))
-              for m in wiring.get("motors", [])}
-    sensors = {s["port"]: open_sensor(s["port"], s.get("type", "touch"))
-               for s in wiring.get("sensors", [])}
-    return BrickCore("right", motors, sensors)
+    return build_core_from_wiring("right", wiring)
+
+
+def handle_relayed_command(core, send, msg: dict):
+    """Execute one relayed command. Testable without hardware.
+
+    ``send`` takes ``(kind, body)`` and transmits one framed message to
+    the master. Returns nothing; acks and pending events are sent.
+    """
+    cmd = msg.get("cmd")
+    if cmd == "__estop__":
+        core._stop_all()
+        send("event", {"brick": "right", "event": "estop",
+                       "detail": {}})
+    elif cmd == "__heartbeat__":
+        core.guards.note_heartbeat()
+    else:
+        ack = core.handle(msg)
+        send("ack", ack.to_dict("right"))
+    for evt in core.pending_events:
+        send("event", {"brick": "right", "event": evt.event,
+                       "detail": evt.detail})
+    core.pending_events.clear()
 
 
 def main() -> None:  # pragma: no cover - needs brick hardware
-    import yaml  # type: ignore
+    from .config import load_brick_config
 
-    with open("config/hardware.local.yaml", encoding="utf-8") as fh:
-        hw = yaml.safe_load(fh)
-    core = build_core_from_config(hw.get("right", {}))
+    cfg = load_brick_config()
+    core = build_core_from_config(
+        {"motors": cfg["motors"], "sensors": cfg["sensors"]})
     core.guards.note_heartbeat()
+
+    if not cfg["master_bt_addr"]:
+        raise SystemExit("brick config needs `master_bt_addr` (slave)")
 
     import bluetooth  # type: ignore  # pybluez on ev3dev
 
     from .link import Framer, encode
 
     sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-    sock.connect((hw["master_bt_addr"], 1))
+    sock.connect((cfg["master_bt_addr"], 1))
+    sock.settimeout(1.0 / STATE_HZ)
     framer = Framer()
     last_state = 0.0
 
@@ -54,29 +76,28 @@ def main() -> None:  # pragma: no cover - needs brick hardware
         while True:
             try:
                 chunk = sock.recv(4096)
-            except OSError:
-                chunk = b""
-            if not chunk:
+            except OSError as exc:
+                import socket as _socket
+
+                if isinstance(exc, _socket.timeout):
+                    chunk = None  # idle tick: poll guards below
+                else:
+                    chunk = b""
+            if chunk == b"":
                 core._stop_all()  # Bluetooth watchdog
                 send("event", {"brick": "right",
                                "event": "bluetooth_loss", "detail": {}})
                 time.sleep(1.0)
                 continue
-            for frame in framer.feed(chunk):
-                if frame.get("kind") == "cmd":
-                    msg = frame["body"]
-                    if msg.get("cmd") == "__estop__":
-                        core._stop_all()
-                    elif msg.get("cmd") == "__heartbeat__":
-                        core.guards.note_heartbeat()
-                    else:
-                        ack = core.handle(msg)
-                        send("ack", ack.to_dict("right"))
-                    for evt in core.pending_events:
-                        send("event", {"brick": "right",
-                                       "event": evt.event,
-                                       "detail": evt.detail})
-                    core.pending_events.clear()
+            if chunk:
+                for frame in framer.feed(chunk):
+                    if frame.get("kind") == "cmd":
+                        handle_relayed_command(core, send, frame["body"])
+            fresh = core.poll_idle_guards()
+            for evt in fresh:
+                send("event", {"brick": "right", "event": evt.event,
+                               "detail": evt.detail})
+            core.pending_events.clear()
             if core.guards.heartbeat_expired():
                 core._stop_all()
                 send("event", {"brick": "right",

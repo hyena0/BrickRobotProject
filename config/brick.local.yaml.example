@@ -1,0 +1,29 @@
+# Brick-local config (git-ignored, lives on the brick, never committed).
+# Copy to config/brick.local.yaml on the brick and edit. The brick reads the
+# hub address from here: moving the hub (PC -> mobile) changes only
+# `hub_address`; topics, payloads and brick code stay the same.
+# Brick platform: ev3dev + ev3dev2 (see src/ev3/brick/).
+# The brick knows ports only: no joint names, ratios or sensor meanings.
+
+# Which brick this file is for: "left" (master) or "right" (slave).
+brick: "left"
+
+# Hub (broker) address: fixed LAN IP or a local `.local` mDNS name.
+hub_address: "192.168.1.10"
+hub_port: 1883
+# The broker takes anonymous clients: no account, no password here.
+
+# Bluetooth address of the master. The slave uses it to connect;
+# the master ignores it.
+master_bt_addr: "00:16:53:AA:BB:CC"
+
+# This brick's own wiring (ports only). Left example below; the right
+# brick lists its own outA/outB/outC + in1/in2 instead.
+motors:
+  - {port: "outA", type: "large"}
+  - {port: "outB", type: "large"}
+  - {port: "outC", type: "medium"}
+sensors:
+  - {port: "in1", type: "touch"}
+  - {port: "in2", type: "touch"}
+  - {port: "in3", type: "touch"}

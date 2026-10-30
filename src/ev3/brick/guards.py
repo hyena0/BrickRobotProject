@@ -8,7 +8,9 @@ Runs locally on each brick with no network in the loop. Rules:
 - Homing exception: a move carrying ``{sensor, motor}`` stops that motor
   when the sensor triggers. This ends homing and is not an error.
 - Stall guard: a motor commanded but near zero speed for > 300 ms stops
-  and reports (for joints without a sensor).
+  and reports (for motors without a sensor).
+- Motor-angle limits: per-port min/max from ``set_guards`` (numbers only).
+  Out-of-range targets are rejected before moving; rejections do not latch.
 - Heartbeat watchdog: no heartbeat for 2 s stops everything.
 - Bluetooth watchdog: slave losing the master link stops everything.
 - Latch: after a guard stop, moves are refused until ``clear_latch``.
@@ -19,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import time
 
-# Stage 0 caps until joint limits are known.
+# Stage 5B cap until joint limits are known (hub side; bricks see ports only).
 MAX_SPEED_DEG_S = 100.0
 SENSOR_POLL_S = 0.01
 STALL_TIMEOUT_S = 0.30
@@ -44,12 +46,31 @@ class SafetyController:
 
     def __init__(self) -> None:
         self.rules: list[SensorRule] = []
+        self.limits: dict[str, tuple[float, float]] = {}
         self.latched = False
         self.latch_reason: str = ""
         self._last_heartbeat = time.monotonic()
 
     def configure(self, rules: list[SensorRule]) -> None:
         self.rules = list(rules)
+
+    def set_limits(self, limits: dict[str, tuple[float, float]]) -> None:
+        """Set per-port motor-angle limits (numbers only, no latching)."""
+        self.limits = {p: (float(lo), float(hi))
+                       for p, (lo, hi) in limits.items()}
+
+    def clear_limits(self) -> None:
+        self.limits = {}
+
+    def check_limit(self, port: str, target: float) -> bool:
+        """Return True when ``target`` is inside the port's limits.
+
+        Ports without configured limits always pass.
+        """
+        if port not in self.limits:
+            return True
+        lo, hi = self.limits[port]
+        return lo <= float(target) <= hi
 
     def clear_latch(self) -> None:
         self.latched = False
