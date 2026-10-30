@@ -1,0 +1,14 @@
+motors:
+- uid: p000003
+  brick: left
+  port: A
+- uid: p000016
+  brick: left
+  port: B
+- uid: p000030
+  brick: left
+  port: C
+- uid: p000042
+  brick: left
+  port: D
+sensors: []

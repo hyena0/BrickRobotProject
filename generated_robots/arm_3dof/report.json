@@ -1,0 +1,581 @@
+{
+  "ok": true,
+  "score": [
+    0.0,
+    53
+  ],
+  "link_lengths": [
+    16.0,
+    136.0,
+    88.0
+  ],
+  "link_errors_mm": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "link_ok": true,
+  "reach_spec_mm": 240.0,
+  "reach_actual_mm": 240.0,
+  "design_ranges_deg": [
+    [
+      -90.0,
+      90.0
+    ],
+    [
+      -30.0,
+      100.0
+    ],
+    [
+      -120.0,
+      120.0
+    ]
+  ],
+  "pre1": {
+    "ok": true,
+    "worst_gap_ldu": 0.0,
+    "points": [
+      {
+        "gap": 0,
+        "point_mm": [
+          12.0,
+          0.0,
+          52.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 0,
+        "point_mm": [
+          12.0,
+          0.0,
+          60.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 0,
+        "point_mm": [
+          12.0,
+          0.0,
+          84.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 0,
+        "point_mm": [
+          12.0,
+          0.0,
+          92.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 1,
+        "point_mm": [
+          12.0,
+          0.0,
+          164.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 1,
+        "point_mm": [
+          12.0,
+          0.0,
+          172.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 1,
+        "point_mm": [
+          12.0,
+          0.0,
+          180.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 2,
+        "point_mm": [
+          12.0,
+          0.0,
+          252.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      },
+      {
+        "gap": 2,
+        "point_mm": [
+          12.0,
+          0.0,
+          260.0
+        ],
+        "gap_ldu": 0.0,
+        "pass": true
+      }
+    ],
+    "pins_per_interface": {
+      "0in": 2,
+      "0out": 2,
+      "1in": 2,
+      "1out": 2,
+      "2out": 2
+    },
+    "counts_ok": true,
+    "components": 1
+  },
+  "pre2": {
+    "ok": true,
+    "poses": 27,
+    "pairs": [],
+    "fallback_parts": [],
+    "mesh": true
+  },
+  "bom": {
+    "11478.dat": 1,
+    "18651.dat": 1,
+    "2780.dat": 9,
+    "32140.dat": 1,
+    "32269.dat": 3,
+    "32270.dat": 4,
+    "32316.dat": 8,
+    "32524.dat": 1,
+    "3705.dat": 2,
+    "3706.dat": 2,
+    "40490.dat": 6,
+    "44294.dat": 4,
+    "60483.dat": 4,
+    "94925.dat": 4,
+    "95658.dat": 2,
+    "99455.dat": 1
+  },
+  "bom_check": {
+    "ok": true,
+    "shortfalls": []
+  },
+  "_names": [
+    "M_base_yaw",
+    "M_pitch",
+    "M_pitch"
+  ],
+  "ev3_gate": {
+    "pass": false,
+    "ports": {
+      "pass": true,
+      "n_motors": 3,
+      "ports": [
+        "A",
+        "B",
+        "C"
+      ],
+      "problems": []
+    },
+    "stock": {
+      "pass": true,
+      "need": {
+        "medium": 1,
+        "large": 2
+      },
+      "own": {
+        "large": 2,
+        "medium": 4
+      },
+      "shortfalls": []
+    },
+    "torque": {
+      "pass": false,
+      "reason": "links: segment 3: flood covers the module, no free joint; check turntable/hinge connection types"
+    },
+    "cable": {
+      "pass": false,
+      "reason": "links: segment 3: flood covers the module, no free joint; check turntable/hinge connection types"
+    },
+    "driver": {
+      "pass": false,
+      "reason": "links: segment 3: flood covers the module, no free joint; check turntable/hinge connection types"
+    },
+    "config": {
+      "motors": {
+        "large": {
+          "rated_Ncm": 30.0,
+          "source": "assumed intermittent (demo-duty) rating, on the order of 60-75% of the commonly cited EV3-large stall (~40 Ncm, unverified); verify against the datasheet before sizing hardware"
+        },
+        "medium": {
+          "rated_Ncm": 8.0,
+          "source": "assumed running rating for the EV3-medium class (unverified); verify against the datasheet before sizing hardware"
+        }
+      },
+      "efficiency": {
+        "value": 0.85,
+        "source": "assumed two spur stages at ~0.92 each; verify"
+      },
+      "gravity_m_s2": 9.81,
+      "gravity_source": "standard gravity",
+      "masses_g": {
+        "default": 2.0,
+        "by_category": {
+          "beam": 4.0,
+          "gear": 1.5,
+          "axle": 0.7,
+          "pin": 0.3,
+          "motor": 60.0,
+          "turntable": 5.0,
+          "bush": 0.5,
+          "connector": 1.0,
+          "brick": 5.0,
+          "sensor": 15.0,
+          "rack": 2.0
+        },
+        "by_part": {
+          "95658.dat": 70.0,
+          "99455.dat": 45.0,
+          "40490.dat": 5.0,
+          "32524.dat": 3.5,
+          "32316.dat": 2.5,
+          "6632.dat": 1.5
+        },
+        "source": "assumed Technic part masses (category estimates with per-part overrides for the arm_4dof BOM); verify all with a scale"
+      },
+      "cable": {
+        "length_mm": 500.0,
+        "slack_mm": 50.0,
+        "source": "assumed 50 cm EV3 cable plus 50 mm service slack; verify against owned cables"
+      },
+      "brick_pos_mm": [
+        120.0,
+        0.0,
+        0.0
+      ],
+      "brick_note": "assumed brick beside the base; adjust to the real placement"
+    }
+  },
+  "segments": {
+    "p000001": 0,
+    "p000002": 0,
+    "p000003": 0,
+    "p000004": 0,
+    "p000005": 0,
+    "p000006": 0,
+    "p000007": 0,
+    "p000008": 0,
+    "p000009": 0,
+    "p000010": 0,
+    "p000011": 0,
+    "p000012": 0,
+    "p000013": 0,
+    "p000014": 1,
+    "p000015": 1,
+    "p000016": 1,
+    "p000017": 1,
+    "p000018": 1,
+    "p000019": 1,
+    "p000020": 1,
+    "p000021": 1,
+    "p000022": 1,
+    "p000023": 1,
+    "p000024": 1,
+    "p000025": 1,
+    "p000026": 1,
+    "p000027": 1,
+    "p000028": 2,
+    "p000029": 2,
+    "p000030": 2,
+    "p000031": 2,
+    "p000032": 2,
+    "p000033": 2,
+    "p000034": 2,
+    "p000035": 2,
+    "p000036": 2,
+    "p000037": 2,
+    "p000038": 2,
+    "p000039": 2,
+    "p000040": 2,
+    "p000041": 2,
+    "p000042": 1,
+    "p000043": 0,
+    "p000044": 0,
+    "p000045": 0,
+    "p000046": 0,
+    "p000047": 2,
+    "p000048": 1,
+    "p000049": 1,
+    "p000050": 1,
+    "p000051": 3,
+    "p000052": 2,
+    "p000053": 2
+  },
+  "beams": [
+    {
+      "uid": "p000042",
+      "part_id": "32524.dat",
+      "segment": 1
+    },
+    {
+      "uid": "p000047",
+      "part_id": "11478.dat",
+      "segment": 2
+    },
+    {
+      "uid": "p000051",
+      "part_id": "32140.dat",
+      "segment": 3
+    }
+  ],
+  "elements": [
+    {
+      "uid": "p000043",
+      "part_id": "2780.dat",
+      "segment": 0,
+      "point_mm": [
+        12.0,
+        0.0,
+        52.0
+      ]
+    },
+    {
+      "uid": "p000044",
+      "part_id": "2780.dat",
+      "segment": 0,
+      "point_mm": [
+        12.0,
+        0.0,
+        60.0
+      ]
+    },
+    {
+      "uid": "p000045",
+      "part_id": "2780.dat",
+      "segment": 0,
+      "point_mm": [
+        12.0,
+        0.0,
+        84.0
+      ]
+    },
+    {
+      "uid": "p000046",
+      "part_id": "2780.dat",
+      "segment": 0,
+      "point_mm": [
+        12.0,
+        0.0,
+        92.0
+      ]
+    },
+    {
+      "uid": "p000048",
+      "part_id": "2780.dat",
+      "segment": 1,
+      "point_mm": [
+        12.0,
+        0.0,
+        164.0
+      ]
+    },
+    {
+      "uid": "p000049",
+      "part_id": "2780.dat",
+      "segment": 1,
+      "point_mm": [
+        12.0,
+        0.0,
+        172.0
+      ]
+    },
+    {
+      "uid": "p000050",
+      "part_id": "2780.dat",
+      "segment": 1,
+      "point_mm": [
+        12.0,
+        0.0,
+        180.0
+      ]
+    },
+    {
+      "uid": "p000052",
+      "part_id": "2780.dat",
+      "segment": 2,
+      "point_mm": [
+        12.0,
+        0.0,
+        252.0
+      ]
+    },
+    {
+      "uid": "p000053",
+      "part_id": "2780.dat",
+      "segment": 2,
+      "point_mm": [
+        12.0,
+        0.0,
+        260.0
+      ]
+    }
+  ],
+  "ldraw": {
+    "n_parts": 53,
+    "max_snap_mm": 0.0
+  },
+  "pre3": {
+    "ok": true,
+    "joints": [
+      {
+        "joint": "J1",
+        "pass": true,
+        "skel_angle_deg": 0.0,
+        "skel_dist_mm": 0.0,
+        "composer_angle_deg": 0.0,
+        "composer_dist_mm": 0.0
+      },
+      {
+        "joint": "J2",
+        "pass": true,
+        "skel_angle_deg": 0.0,
+        "skel_dist_mm": 0.0,
+        "composer_angle_deg": 0.0,
+        "composer_dist_mm": 0.0
+      },
+      {
+        "joint": "J3",
+        "pass": true,
+        "skel_angle_deg": 0.0,
+        "skel_dist_mm": 0.0,
+        "composer_angle_deg": 0.0,
+        "composer_dist_mm": 0.0
+      }
+    ]
+  },
+  "audit": {
+    "ok": true,
+    "elements": [
+      {
+        "uid": "p000043",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          0,
+          1
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000044",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          0,
+          1
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000045",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          1
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000046",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          1
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000048",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          1,
+          2
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000049",
+        "part_id": "2780.dat",
+        "neighbours": 3,
+        "segments": [
+          1,
+          2
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000050",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          2
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000052",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          2,
+          3
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      },
+      {
+        "uid": "p000053",
+        "part_id": "2780.dat",
+        "neighbours": 2,
+        "segments": [
+          2,
+          3
+        ],
+        "gap_beam": true,
+        "module_part": true,
+        "pass": true
+      }
+    ]
+  },
+  "tries": [
+    {
+      "rank": 0,
+      "score": [
+        0.0,
+        53
+      ],
+      "ok": true
+    }
+  ]
+}

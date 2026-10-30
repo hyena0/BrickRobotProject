@@ -1,0 +1,169 @@
+{
+  "frame": "base link, Z up, mm",
+  "links": [
+    {
+      "id": "L0"
+    },
+    {
+      "id": "L1"
+    },
+    {
+      "id": "L2"
+    },
+    {
+      "id": "L3"
+    },
+    {
+      "id": "L4"
+    }
+  ],
+  "joints": [
+    {
+      "id": "J1",
+      "type": "revolute",
+      "parent": "L0",
+      "child": "L1",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "point_mm": [
+        0.0,
+        0.0,
+        16.0
+      ],
+      "limits_deg": [
+        -150.0,
+        150.0
+      ],
+      "zero": "pose in the source file"
+    },
+    {
+      "id": "J2",
+      "type": "revolute",
+      "parent": "L1",
+      "child": "L2",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "point_mm": [
+        0.0,
+        0.0,
+        136.0
+      ],
+      "limits_deg": [
+        -30.0,
+        100.0
+      ],
+      "zero": "pose in the source file"
+    },
+    {
+      "id": "J3",
+      "type": "revolute",
+      "parent": "L2",
+      "child": "L3",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "point_mm": [
+        0.0,
+        0.0,
+        232.0
+      ],
+      "limits_deg": [
+        -120.0,
+        120.0
+      ],
+      "zero": "pose in the source file"
+    },
+    {
+      "id": "J4",
+      "type": "revolute",
+      "parent": "L3",
+      "child": "L4",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "point_mm": [
+        0.0,
+        0.0,
+        276.0
+      ],
+      "limits_deg": [
+        -180.0,
+        180.0
+      ],
+      "zero": "pose in the source file"
+    }
+  ],
+  "actuators": [
+    {
+      "id": "M1",
+      "brick": "left",
+      "port": "A",
+      "motor": "medium"
+    },
+    {
+      "id": "M2",
+      "brick": "left",
+      "port": "B",
+      "motor": "large"
+    },
+    {
+      "id": "M3",
+      "brick": "left",
+      "port": "C",
+      "motor": "large"
+    },
+    {
+      "id": "M4",
+      "brick": "left",
+      "port": "D",
+      "motor": "medium"
+    }
+  ],
+  "transmission": {
+    "coupling": "q = C m, q in joint degrees, m in motor degrees",
+    "C": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.6,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.6,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "end_effector": {
+    "link": "L4",
+    "point_mm": [
+      0.0,
+      0.0,
+      328.0
+    ]
+  }
+}

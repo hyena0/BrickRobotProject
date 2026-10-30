@@ -1,0 +1,28 @@
+{
+  "design": {
+    "joints": [
+      {
+        "module": "base_yaw",
+        "beam": "32316.dat",
+        "reason": "pinned arm_4dof design"
+      },
+      {
+        "module": "pitch",
+        "beam": "32316.dat",
+        "reason": "pinned arm_4dof design"
+      },
+      {
+        "module": "pitch",
+        "beam": "6632.dat",
+        "reason": "pinned arm_4dof design"
+      },
+      {
+        "module": "wrist_roll",
+        "beam": "6632.dat",
+        "reason": "pinned arm_4dof design"
+      }
+    ]
+  },
+  "rounds": 0,
+  "notes": "pinned: greedy cannot tell coaxial yaw/roll modules apart"
+}

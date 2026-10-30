@@ -1,0 +1,88 @@
+{
+  "bom": {
+    "2780.dat": 1,
+    "32062.dat": 1,
+    "32269.dat": 1,
+    "32270.dat": 2,
+    "3705.dat": 2,
+    "40490.dat": 2,
+    "99455.dat": 1
+  },
+  "frame": "module local, Z up, mm",
+  "geometry": "module.ldr",
+  "input_mount": {
+    "position_mm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rotation": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "joint": {
+    "axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "joint_deg_per_motor_deg": 1.0,
+    "point_mm": [
+      0.0,
+      0.0,
+      16.0
+    ],
+    "range_deg": [
+      -150.0,
+      150.0
+    ]
+  },
+  "motor": {
+    "kind": "medium"
+  },
+  "name": "base_yaw",
+  "output_mount": {
+    "position_mm": [
+      0.0,
+      0.0,
+      52.0
+    ],
+    "rotation": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "size_mm": [
+    72.0,
+    40.0,
+    88.0
+  ],
+  "template": "base_yaw"
+}

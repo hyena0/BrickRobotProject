@@ -1,0 +1,139 @@
+{
+  "robot": "arm_4dof",
+  "mode": "oracle",
+  "pipeline": "generic tools + 5D minimal driver",
+  "overall_pass": true,
+  "gates": {
+    "joint_count": {
+      "pass": true,
+      "pred": 4,
+      "expected": 4
+    },
+    "axes": {
+      "pass": true,
+      "joints": [
+        {
+          "pos_mm": 0.0,
+          "cos_abs": 1.0,
+          "angle_deg": 0.0,
+          "pass": true,
+          "pred": "J1",
+          "expected": "J1",
+          "line_dist_mm": 0.0
+        },
+        {
+          "pos_mm": 0.0,
+          "cos_abs": 1.0,
+          "angle_deg": 0.0,
+          "pass": true,
+          "pred": "J2",
+          "expected": "J2",
+          "line_dist_mm": 0.0
+        },
+        {
+          "pos_mm": 0.0,
+          "cos_abs": 1.0,
+          "angle_deg": 0.0,
+          "pass": true,
+          "pred": "J3",
+          "expected": "J3",
+          "line_dist_mm": 0.0
+        },
+        {
+          "pos_mm": 0.0,
+          "cos_abs": 1.0,
+          "angle_deg": 0.0,
+          "pass": true,
+          "pred": "J4",
+          "expected": "J4",
+          "line_dist_mm": 0.0
+        }
+      ],
+      "pos_tol_mm": 5.0,
+      "axis_tol_deg": 5.0
+    },
+    "links": {
+      "pass": true,
+      "pred_mm": [
+        16.0,
+        120.0,
+        96.0,
+        44.0
+      ],
+      "exp_mm": [
+        16.0,
+        120.0,
+        96.0,
+        44.0
+      ],
+      "errors_mm": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tol_mm": 8.0
+    },
+    "ratios": {
+      "pass": true,
+      "joints": [
+        {
+          "joint": "J1",
+          "pred_ratio": 1.0,
+          "exp_ratio": 1.0,
+          "motor": "p000003",
+          "sign_known": true,
+          "sign_ok": true,
+          "err_pct": 0.0,
+          "abs_diff": 0.0,
+          "pass": true
+        },
+        {
+          "joint": "J2",
+          "pred_ratio": 0.6,
+          "exp_ratio": 0.6,
+          "motor": "p000016",
+          "sign_known": true,
+          "sign_ok": true,
+          "err_pct": 0.0,
+          "abs_diff": 0.0,
+          "pass": true
+        },
+        {
+          "joint": "J3",
+          "pred_ratio": 0.6,
+          "exp_ratio": 0.6,
+          "motor": "p000030",
+          "sign_known": true,
+          "sign_ok": true,
+          "err_pct": 0.0,
+          "abs_diff": 0.0,
+          "pass": true
+        },
+        {
+          "joint": "J4",
+          "pred_ratio": 1.0,
+          "exp_ratio": 1.0,
+          "motor": "p000042",
+          "sign_known": true,
+          "sign_ok": true,
+          "err_pct": 0.0,
+          "abs_diff": 0.0,
+          "pass": true
+        }
+      ],
+      "c_max_abs_diff": 0.0,
+      "ratio_pct_tol": 1.0,
+      "c_abs_tol": 0.02
+    },
+    "ik": {
+      "pass": true,
+      "success_rate": 1.0,
+      "median_pos_mm": 0.0,
+      "p95_pos_mm": 0.0,
+      "n": 500,
+      "position_only": true
+    }
+  },
+  "notes": "IK evaluated at wrist centre on both sides; tool tip 52.0 mm beyond wrist (reported, not gated). C compared on magnitudes and signs; unknown-sign paths fail. Position-only IK: under-6-joint arms cannot control full orientation."
+}

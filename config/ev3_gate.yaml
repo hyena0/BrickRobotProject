@@ -1,0 +1,52 @@
+# EV3 gate assumptions (Stage 5D). Every value below is an explicitly
+# labeled assumption: entries marked "assumed" are placeholders that must
+# be replaced with datasheet figures and scale measurements before any
+# hardware run. Sources are echoed into the assembly report.
+motors:
+  large:
+    rated_Ncm: 30.0
+    source: >-
+      assumed intermittent (demo-duty) rating, on the order of 60-75% of
+      the commonly cited EV3-large stall (~40 Ncm, unverified); verify
+      against the datasheet before sizing hardware
+  medium:
+    rated_Ncm: 8.0
+    source: >-
+      assumed running rating for the EV3-medium class (unverified);
+      verify against the datasheet before sizing hardware
+efficiency:
+  value: 0.85
+  source: assumed two spur stages at ~0.92 each; verify
+gravity_m_s2: 9.81
+gravity_source: standard gravity
+masses_g:
+  default: 2.0
+  by_category:
+    beam: 4.0
+    gear: 1.5
+    axle: 0.7
+    pin: 0.3
+    motor: 60.0
+    turntable: 5.0
+    bush: 0.5
+    connector: 1.0
+    brick: 5.0
+    sensor: 15.0
+    rack: 2.0
+  by_part:
+    "95658.dat": 70.0
+    "99455.dat": 45.0
+    "40490.dat": 5.0
+    "32524.dat": 3.5
+    "32316.dat": 2.5
+    "6632.dat": 1.5
+  source: >-
+    assumed Technic part masses (category estimates with per-part
+    overrides for the arm_4dof BOM); verify all with a scale
+cable:
+  length_mm: 500.0
+  slack_mm: 50.0
+  source: assumed 50 cm EV3 cable plus 50 mm service slack; verify
+    against owned cables
+brick_pos_mm: [120.0, 0.0, 0.0]
+brick_note: assumed brick beside the base; adjust to the real placement

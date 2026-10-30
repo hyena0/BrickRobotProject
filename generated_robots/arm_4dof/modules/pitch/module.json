@@ -1,0 +1,90 @@
+{
+  "bom": {
+    "15462.dat": 1,
+    "2780.dat": 2,
+    "32269.dat": 1,
+    "32270.dat": 1,
+    "32316.dat": 1,
+    "40490.dat": 2,
+    "44294.dat": 2,
+    "94925.dat": 2,
+    "95658.dat": 1
+  },
+  "frame": "module local, Z up, mm",
+  "geometry": "module.ldr",
+  "input_mount": {
+    "position_mm": [
+      0.0,
+      0.0,
+      -4.0
+    ],
+    "rotation": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "joint": {
+    "axis": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "joint_deg_per_motor_deg": 0.6,
+    "point_mm": [
+      0.0,
+      0.0,
+      48.0
+    ],
+    "range_deg": [
+      -120.0,
+      120.0
+    ]
+  },
+  "motor": {
+    "kind": "large"
+  },
+  "name": "pitch",
+  "output_mount": {
+    "position_mm": [
+      0.0,
+      0.0,
+      60.0
+    ],
+    "rotation": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "size_mm": [
+    40.0,
+    96.0,
+    100.0
+  ],
+  "template": "pitch"
+}
