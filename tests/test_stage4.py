@@ -113,6 +113,16 @@ def test_ik_position_only_synthetic():
     assert sol["pos_err_mm"] <= 5.0
 
 
+def test_ik_position_only_without_target_mat():
+    doc = make_doc()
+    q_known = [-30.0, 40.0, -50.0, 20.0, -35.0, 15.0]
+    tgt = fk_model(q_known, doc)
+    sol = ik(tgt["pos_mm"], None, doc, position_only=True, seed=2)
+    assert sol["success"] is True
+    assert sol["pos_err_mm"] <= 5.0
+    assert sol["rot_err_deg"] == 0.0
+
+
 def test_motors_roundtrip_diagonal():
     c = [[2.0, 0.0], [0.0, 0.5]]
     mids = ["m1", "m2"]

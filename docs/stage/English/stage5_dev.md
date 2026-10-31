@@ -351,3 +351,219 @@ reading it first -- do not repeat; read-merge instead. Fixes:
 Brick/Port selects labeled Diag-only (jog always follows the map),
 new /api/jogmap/delete + Delete entry button for single-joint
 recovery, committed isolation test. Recovery: restart the server.
+
+## M4 observed overrides (2026-10-31): hw_observed.local.yaml rules
+
+- `config/hw_observed.local.yaml` (git-ignored) is the top authority.
+  Any item with a value there is never re-measured or re-asked.
+- Changed: `config/homing.local.yaml` only -- added `source:`
+  markers (measured / observed-skipped). Values were already
+  identical to the observed file; fake-brick `--auto` plan still
+  validates (J1-J3/J5-J6 homed, J4 skipped).
+- NOT changed, with reason:
+  - `config/ports.local.yaml`: J1-J3 confirmed equal to current
+    values, but the file header forbids joint keys, so measured
+    status lives here, not there.
+  - `config/jogmap.local.json`: all six `joint_sign` are null, so
+    no ratio sign flips. Read-merge only, never blind rewrite.
+  - `packages/robot_inferred/robot_package.json`: generated from
+    the model (inference output) with no calibration block --
+    measured zero offsets stay in the run record
+    (`runs/stage5c/2026-10-31/homing.json`) and the observed file.
+  - Inference files (`runs/stage3/pred_C.json`, model, bounds):
+    untouched.
+- GT separation: this file is never fed into stage 1-4 code or
+  agent inputs.
+
+Inference vs measured (sign = joint_deg per motor_deg):
+
+| Joint | Motor port: inference -> observed | Ratio sign: inference -> observed | Sensor angle (5A.1) -> measured zero |
+|---|---|---|---|
+| J1 | right/B (p000147) -> same, measured (M3 homing ok) | -0.0857 -> null (M4 open) | trip 44.0 deg (right/in1) -> offset 38.34, dir -1 |
+| J2 | left/A (p000149) -> same, measured (M3 homing ok) | -0.0238 (temp fallback) -> null (M4 open) | trip 51.0 deg (left/in1) -> offset 26.87, dir -1; prior run 45.72, repeatability open (2 deg goal) |
+| J3 | left/B (p000148) -> same, measured (M3 homing ok) | -0.0343 -> null (M4 open) | trip 26.0 deg (left/in2) -> offset 37.28, dir +1 |
+| J4 | right/A (p000737); jogmap override left/outC unverified -> null | +0.2 -> null (M4 open) | left/in3 trip unverified -> homing skipped |
+| J5 | left/C (p000736); jogmap override left/outD unverified -> null, coupled with J6 | -0.2 -> null (M4 open) | no sensor -> manual offset -20.0 |
+| J6 | left/C shared (p000736, C=0.7143); jogmap override right/outA unverified -> null, coupled with J5 | -0.1429 -> null (M4 open) | color-sensor assignment unknown -> manual offset -4.00 |
+
+Motion rules now authoritative from the observed file: arrival
+band 5 deg, stall only above 5 deg + 300 ms no-progress,
+min motor move 10 deg, jog 250 dps, homing 150 dps,
+first-jog limit 5 deg on unconfirmed joints.
+
+## M4 signs from GT, ranges from 5A (2026-10-31, no hardware)
+
+Physical measurement halted; nulls filled from existing records
+only. GT (`gt/kinematics_gt_v2.json`, status measured-human,
+R17 convention, user-verified wiring) went to control settings
+only -- never into stage 1-4 inputs.
+
+Signs (control ratio = joint_deg/motor_deg; magnitude from
+inference, sign from GT drive diagonal, all +1.0 in R17):
+
+| Joint | Inference sign (DRIVE_RATIOS, stage 3) | GT sign (C drive, R17) | Adopted jogmap ratio |
+|---|---|---|---|
+| J1 | -0.0857 | +1 | +0.0857 (from_gt) |
+| J2 | -0.0238 (temp fallback, no model ratio) | +1 | +0.0238 (from_gt) |
+| J3 | -0.0343 | +1 | +0.0343 (from_gt) |
+| J4 | +0.2 | +1 | +0.2 (from_gt) |
+| J5 | -0.2 | +1 | +0.2 (from_gt) |
+| J6 | -0.1429 | +1 | +0.1429 (from_gt) |
+
+5 of 6 signs flip vs inference; J4 agrees. Read-merged into
+`config/jogmap.local.json` (existing brick/port entries
+preserved). GT coupling magnitudes (gt_measured.json: J5<-736
+-0.2, J6<-743 +0.159/-0.082) are joint-joint shape, not control
+ratios -- signs only were taken.
+
+Ranges: 5A package limits adopted as-is (from_docs); the wider GT
+original-controller envelope was not adopted:
+
+| Joint | 5A adopted (pkg limits_deg) | GT limits (not adopted) |
+|---|---|---|
+| J1 | [-50.0, 39.0] | [-180, 180] |
+| J2 | [-116.25, 40.0] | [-95, 44] |
+| J3 | [-74.38, 21.0] | [-45, 75] |
+| J4 | [-115.0, 125.0] | [-180, 180] |
+| J5 | [-90.0, 124.38] | [-5, 120] |
+| J6 | [-60.0, 135.0] | [-180, 180] |
+
+Ports J4/J5/J6 + color sensor: records disagree (see open
+items) -- user decision pending, nothing filled.
+
+## Ports decided, signs classified, coupling wired (2026-10-31, no hardware)
+
+Ports adopted from diagram + design + GT (all three agree):
+J4 left/C, J5 left/D, J6 right/A, color sensor right/in2 (J1
+reference). The outlier was `ports.local.yaml` (p000737/p000743
+swapped); fixed to GT (p000736 left/C, p000737 left/D, p000743
+right/A). J1-J3 were identical in all records. `hw_observed`
+ports/sensors/color entries now from_docs; J5/J6 manual offsets
+(-20.0/-4.00) marked invalid (recorded under wrong ports);
+`config/homing.local.yaml` J4 marked from_docs (same-brick target,
+direction still unconfirmed).
+
+Sign check per joint (GT C vs model C_raw, same R17 frame):
+GT and model joint axes agree in direction on all six joints
+(J1 [0,0,1], J2/J3 [0.707,0.707,0], J4/J6 [-0.707,0.707,0],
+J5 [0,0,-1] both sides), so no convention flip applies --
+control sign = GT sign directly. Result: 5 inference sign errors
+(J1, J2, J3, J5, J6), J4 agreed:
+
+| Joint | Inference sign | GT sign | Verdict |
+|---|---|---|---|
+| J1 | -0.0857 | +1 | 추론 오류 |
+| J2 | -0.0238 (fallback) | +1 | 추론 오류 |
+| J3 | -0.0343 | +1 | 추론 오류 |
+| J4 | +0.2 | +1 | 일치 |
+| J5 | -0.2 | +1 | 추론 오류 |
+| J6 | -0.1429 | +1 | 추론 오류 |
+
+`config/jogmap.local.json` rewritten with model-frame signs
+(all +magnitudes, GT signs; existing brick/port entries kept).
+GT went to control settings only, never stage 1-4 inputs.
+
+Coupling: the converters used independent ratios only. Now
+`coupled_motor_targets` / `coupled_joint_readback` in
+`src/console/mini.py` implement the GT wrist coupling
+(q5 = r5*(-0.2*m_a + m_b),
+q6 = r6*(0.159*m_a - 0.0816*m_b + m_c), J1-J3 identity),
+wired into mini jog, control pose apply, overview and pose error
+readback. pred_C's shared-736 J5/J6 relation is superseded by the
+corrected wiring. Fake-brick suites green (homing + mini +
+control + stage4: 77 passed).
+
+`src/homing/plan.py` now loads the local jog overrides like the
+consoles do (it previously used model-only wiring, so J4 stayed
+cross-brick/skipped after the port fix). Fake `--auto` plan:
+all six homed.
+
+## Gizmo-path IK check (2026-10-31, no hardware)
+
+Cause of "only J6 moves": two stacked faults. (1) /api/ik is
+position-only, but the live adopted ranges still held inverted
+captures (J1 [23.34,13.34], J3 [42.28,16.0]) until the degenerate
+lo>=hi guard; pinned joints forced the solver onto the only free
+variable. (2) The TCP sits on the J6 axis (position-Jacobian
+column < 1.0 mm lever), so J6 is a free spin variable from random
+restart seeds. Fix: freeze J6 (position-only) at the incoming pose
++ ignore degenerate point captures + neighborhood seeds around
+the drag start. Solved-branch check (start from true q): spread 50/50
+converge -- the model is fine, DLS-from-Q0 coverage is
+the gap (13/60 stick at J2/J3 adopted limits).
+`src/verify/ik_check.py` calls the gizmo endpoint
+(dispatch /api/ik, Q0 start), 50 spread + 10 near + 5 far.
+Multi-start (current + 10 safe poses + previous solution, min
+TCP error; locked wrist joints keep their own seed value, not
+the Q0 value -- the global-freeze bug hid the wrist basins):
+reachable 59/60 (median err 0.0 mm, max 0.06), unreachable
+5/5. The single miss r33 reaches err 0.0 with one joint, so it
+is a criterion artifact, not a solver miss. J6 delta = 0.0 on
+all 65. Evidence: `runs/stage5c/ik_check_multi/` (report.json,
+table.md, per-target front/side PNG with start/result/GT/TCP).
+Console: TCP dot + TCP-target line + live distance, pre-drag
+pose, GT overlay, ik-stat line, "닿는 목표" button
+(/api/reachable_target), mat points (/api/mat_points), demo
+wizard, /api/goto (15 dps default).
+
+## Inference vs GT accuracy (eval only, 2026-10-31, no hardware)
+
+GT models (`gt/kinematics_gt_v2.json`, `gt_measured.json`) went to
+control/eval display only, never into stage 1-4 inputs.
+
+Recorded result, no cause analysis: 추론 모델 vs GT: 위치 오차
+중앙값 5.3mm, J1·J6 형상 오차, 방향은 일치, 제어 영향 없음.
+Evidence: `runs/stage5c/sim/report.json` (`gt_eval.json` FAIL 9/20,
+median 5.256mm gauge-corrected, rot max 0.15deg).
+
+## Roadmap (deferred, needs no hardware except where noted)
+
+- `conformance/` suite (spec 5C.7): not started.
+- `docs/mobile_port.md` (spec 5C.8, design only): not started.
+- Release guard `src/release/check.py` is a rough cut (a few
+  tests); currently FAILs on 21 pre-existing tracked files
+  (`generated_robots/*`, `assets/modules/*.ldr`, `gt/*`,
+  `tests/fixtures/*.ldr`, `tests/*.blend`). Passing needs an
+  explicit untrack/allowlist decision -- history untouched.
+- Hardware-gated (6단계 실기): J4 homing direction, J5/J6 manual
+  re-mark, J2 repeatability (2°), M4 direction verdicts, 3x homing,
+  measured ranges into package, 10 safe poses on hardware.
+
+## Console grounding + shared table (2026-10-31, no hardware)
+
+One table definition in `config/calibration.local.yaml` stage
+(table_z -220.8 from D0 mesh bbox stride-1 = lowest part vertex
+32278, center 34.0/79.5, reach R 335.3); screen, IK targets, mat
+points, reports all read `/api/table`. Stage = model - C, table =
+z 0, base bottom center = origin; arm.position carries the single
+model->screen transform (primitives and LDraw share it).
+Gizmo starts/snaps at TCP, clamped at table (server clamps again),
+out-of-range turns marker red and follows nearest reachable only.
+Reach envelope shown as translucent shoulder sphere; mat dots live
+on the same frame. Desk+40 proved unreachable (min TCP height
+table+212 under 5A+coupled, binding constraint J2+J3>=0 margin).
+
+## Tip TCP + gripper-down + mat riser (2026-10-31, no hardware)
+
+TCP redefined to the gripper tip (D6-frame offset
+[-160.0, 236.8, 134.2], 56.4mm from J6; wrist kept for GT
+overlay). "Gripper down" checkbox solves position+orientation with
+minimal-rotation mat. Orientation DLS sticks at 0.05 damping near
+seeds but converges at 0.1; damping change reverted (the failing
+point needed J4 -120 < -115 limit, genuinely out of range).
+(A) lowest riser with 9/9 tip-down under 5A+coupled: table+220.8
+(model z=0), all err <=1.9/1.7, seeds stored in mat JSON, console
+sends them as q_init. `assets/private/mat_a3.pdf` + riser box
+regenerated. (C) desk+40 without coupled: positions exist but
+down solves 3/9 (5A per-joint ranges block, not coupling); leg
+gaps fine on solved legs. Not adopted.
+
+## UI smoke harness (2026-10-31, local only)
+
+`scripts/ui_smoke.sh`: fake-brick server + headless Chromium,
+fails on any browser console error, checks scene via
+`window._scene`, drives mat 1 + grip-down mat 2 (TCP-target
+<=5mm), saves 3 shots to `runs/ui_smoke/`. Trap fixed: #ik-live
+refreshes every frame, so waits key off #ik-stat rewrites.
+ALL PASS 2026-10-31. `dirLine` scope bug (init-local used in
+tick) fixed in the same pass.

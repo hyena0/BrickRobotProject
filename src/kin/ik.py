@@ -133,6 +133,8 @@ def _errors(q, axes, points, ee, pos_t, rot_t):
     pos = [t[0][3], t[1][3], t[2][3]]
     rot = [row[:3] for row in t[:3]]
     pe = math.sqrt(sum((pos_t[i] - pos[i]) ** 2 for i in range(3)))
+    if rot_t is None:
+        return pe, 0.0
     rt = [[sum(rot[j][i] * rot_t[j][k] for j in range(3))
            for k in range(3)] for i in range(3)]
     lv = _rot_log(rt)
@@ -163,7 +165,8 @@ def _coupled_ok(q_deg, joint_ids, coupled, lookup=None) -> bool:
 
 def ik(target_pos, target_mat, doc, q_init_deg=None,
        position_only=False, n_restarts=N_RESTARTS,
-       max_restarts=32, seed=0, limits_doc=None) -> dict:
+       max_restarts=32, seed=0, limits_doc=None,
+       extra_starts=None) -> dict:
     """Solve IK. Target pose: mm position + 3x3 rotation matrix.
 
     Returns {"q_deg", "success", "pos_err_mm", "rot_err_deg"}.
@@ -191,18 +194,45 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
         coupled = limits_doc.get("coupled_limits", [])
         lookup = limits_doc.get("coupled_lookup", {})
     rng = random.Random(seed)
+    # Position-only solving cannot move joints whose axis passes
+    # through the TCP (zero position Jacobian column, e.g. J6 when
+    # the TCP sits on its axis): they are free variables that only
+    # add random spins from restart seeds. Freeze them at the
+    # incoming pose so a gizmo drag moves the arm, not the wrist.
+    locked = []
+    if position_only:
+        for i, (w, p) in enumerate(zip(axes, points)):
+            lx, ly, lz = (ee[0] - p[0], ee[1] - p[1], ee[2] - p[2])
+            cx, cy, cz = (w[1] * lz - w[2] * ly,
+                          w[2] * lx - w[0] * lz,
+                          w[0] * ly - w[1] * lx)
+            if math.sqrt(cx * cx + cy * cy + cz * cz) < 1.0:
+                locked.append(i)
     seeds = []
     if q_init_deg is not None:
         seeds.append([math.radians(x) for x in q_init_deg])
+    # Multi-start: extra candidate poses (safe poses, previous
+    # solution) run through the same DLS; the best (min TCP error)
+    # wins below. Deterministic order, no threads (GIL-bound).
+    for extra in extra_starts or []:
+        try:
+            seeds.append([math.radians(float(x)) for x in extra])
+        except (TypeError, ValueError):
+            continue
     seeds.append([0.0] * len(axes))
     def run_seed(s, damping, iters):
         q = [min(max(v, lo), hi) for v, (lo, hi) in zip(s, lims)]
+        # Locked joints stay at their own seed value (each start
+        # keeps its wrist), not at a global first-seed value.
+        seed_hold = [q[i] for i in locked]
         for it in range(iters):
             q, ep, _ = _dls_step(q, axes, points, ee, target_pos,
                                  target_mat, position_only,
                                  damping=damping)
             q = [min(max(v, lo), hi)
                  for v, (lo, hi) in zip(q, lims)]
+            for k, i in enumerate(locked):
+                q[i] = seed_hold[k]
             if it % 10 == 9 or sum(x * x for x in ep) < 1e-6:
                 pe, re = _errors(q, axes, points, ee, target_pos,
                                  target_mat)
@@ -231,6 +261,15 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
             pending += [[rng.uniform(lo, hi) for lo, hi in lims]
                         for _ in range(take)]
             randoms_used += take
+            # Gizmo-realistic seeds: the drag starts from the current
+            # pose, so also try its neighborhood (deterministic).
+            if q_init_deg is not None:
+                base = [math.radians(x) for x in q_init_deg]
+                for _ in range(min(4, take)):
+                    pending.append(
+                        [min(max(b + rng.uniform(-0.35, 0.35), lo),
+                             hi)
+                         for b, (lo, hi) in zip(base, lims)])
         for s in pending:
             cand = run_seed(s, DAMPING, MAX_ITERS)
             if best is None or cand[0] < best[0]:
@@ -240,6 +279,22 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
             break
         if randoms_used >= max_restarts:
             break
+    if best is not None and not successful(best):
+        # Basin hopping: the DLS sticks at joint limits while a
+        # better basin exists. Kick the winner hard a few times,
+        # keep the best. Applies to position and orientation both;
+        # locked joints keep their own seed value inside run_seed.
+        for _ in range(6):
+            kick = [v + rng.uniform(-0.5, 0.5) for v in best[1]]
+            kick = [min(max(v, lo), hi)
+                    for v, (lo, hi) in zip(kick, lims)]
+            for i in locked:
+                kick[i] = best[1][i]
+            cand = run_seed(kick, DAMPING, MAX_ITERS)
+            if cand[0] < best[0]:
+                best = cand
+            if successful(best):
+                break
     if not position_only and best is not None:
         # Refinement: perturb the winner with low damping to
         # escape orientation local minima near the target.

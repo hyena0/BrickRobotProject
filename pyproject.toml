@@ -15,3 +15,5 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-m", "not experimental"]
+markers = ["experimental: Stage 5D work-in-progress, out of the default run"]

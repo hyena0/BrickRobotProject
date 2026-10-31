@@ -40,20 +40,96 @@ HOME_SEARCH_DEG = 360.0
 MIN_MOVE_MOTOR_DEG = 10.0
 
 # Physical joint-to-motor ratios (joint_deg = ratio * motor_deg, so
-# motor_deg = joint_deg / ratio) from runs/stage3/pred_C.json (C_raw
-# drive coefficients, model-derived). J2 has no model ratio (drive
-# break) and carries the section-4 fallback as a TEMPORARY value.
-# Signs are re-checked in M4: flip one per joint via
-# config/jogmap.local.json, e.g. {"J2": {"ratio": 0.0238}}, no code
-# change needed. Joints missing here fall back to the model ratio.
+# motor_deg = joint_deg / ratio). Magnitudes from runs/stage3/pred_C.json
+# (C_raw drive coefficients, model-derived). J2 has no model ratio (drive
+# break) and carries the section-4 fallback magnitude.
+# Signs are GT (gt/kinematics_gt_v2.json transmission C drive diagonal,
+# all +1 in R17): GT and model (R17 chain) axes agree per joint, so the
+# old negative inference signs were inference errors, not a convention
+# difference. Joints missing from config/jogmap.local.json fall back here.
 DRIVE_RATIOS = {
-    "J1": -0.0857,
-    "J2": -0.0238,
-    "J3": -0.0343,
+    "J1": 0.0857,
+    "J2": 0.0238,
+    "J3": 0.0343,
     "J4": 0.2,
-    "J5": -0.2,
-    "J6": -0.1429,
+    "J5": 0.2,
+    "J6": 0.1429,
 }
+
+# Wrist mechanical coupling (GT kinematics_gt_v2 transmission C,
+# normalized shape, R17 axes; control settings only, never stage 1-4
+# input). With (m_a, m_b, m_c) the J4/J5/J6 drive motors from the jog
+# map and (r4, r5, r6) their drive ratios:
+#   q4 = r4*m_a
+#   q5 = r5*(-0.2*m_a + m_b)
+#   q6 = r6*(0.1591837*m_a - 0.0816327*m_b + m_c)
+# J1-J3 rows are identity (independent). Inverted for commanding:
+#   m_a = y4
+#   m_b = y5 + 0.2*y4
+#   m_c = y6 - 0.1428572*y4 + 0.0816327*y5
+# where y_i = (q_i - offset_i) / r_i.
+WRIST_JOINTS = ("J4", "J5", "J6")
+WRIST_C = ((1.0, 0.0, 0.0),
+           (-0.2, 1.0, 0.0),
+           (0.1591837, -0.0816327, 1.0))
+WRIST_C_INV = ((1.0, 0.0, 0.0),
+               (0.2, 1.0, 0.0),
+               (-0.1428572, 0.0816327, 1.0))
+
+
+def _wrist_motors(jog_map):
+    """(brick, port) of the J4/J5/J6 drive motors, in joint order."""
+    return [(jog_map[j]["brick"], jog_map[j]["port"])
+            for j in WRIST_JOINTS]
+
+
+def coupled_motor_targets(q, jog_map, offsets=None):
+    """Joint targets -> motor targets with wrist coupling.
+
+    ``q`` maps all six joints to joint degrees; ``offsets`` maps joint
+    to its zero offset (default 0). Returns ``{(brick, port):
+    motor_deg}``. J1-J3 pass through independently.
+    """
+    off = offsets or {}
+    y = {}
+    for j in ("J1", "J2", "J3", "J4", "J5", "J6"):
+        y[j] = ((float(q[j]) - float(off.get(j, 0.0) or 0.0))
+                / jog_map[j]["ratio"])
+    motors = {}
+    for j in ("J1", "J2", "J3"):
+        motors[(jog_map[j]["brick"], jog_map[j]["port"])] = y[j]
+    yw = [y[j] for j in WRIST_JOINTS]
+    mw = [sum(WRIST_C_INV[i][k] * yw[k] for k in range(3))
+          for i in range(3)]
+    for (brick, port), m in zip(_wrist_motors(jog_map), mw):
+        motors[(brick, port)] = m
+    return motors
+
+
+def coupled_joint_readback(encoders, jog_map, offsets=None):
+    """Motor readings -> joint degrees with wrist coupling.
+
+    ``encoders`` maps ``(brick, port)`` to motor degrees. Inverse of
+    ``coupled_motor_targets`` (up to offsets).
+    """
+    off = offsets or {}
+    q = {}
+    for j in ("J1", "J2", "J3"):
+        m = encoders.get((jog_map[j]["brick"], jog_map[j]["port"]))
+        q[j] = (jog_map[j]["ratio"] * m + float(off.get(j, 0.0) or 0.0)
+                if m is not None else None)
+    motors = _wrist_motors(jog_map)
+    m = [encoders.get(mp) for mp in motors]
+    if any(v is None for v in m):
+        for j in WRIST_JOINTS:
+            q[j] = None
+        return q
+    yw = [sum(WRIST_C[i][k] * m[k] for k in range(3))
+          for i in range(3)]
+    for j, y in zip(WRIST_JOINTS, yw):
+        q[j] = (jog_map[j]["ratio"] * y
+                + float(off.get(j, 0.0) or 0.0))
+    return q
 
 
 def default_override_path():
@@ -323,7 +399,22 @@ class _Handler(BaseHTTPRequestHandler):
             joint_delta = float(args.get("delta", JOG_STEP_DEG))
             joint_delta = max(-MAX_JOG_STEP_DEG,
                               min(MAX_JOG_STEP_DEG, joint_delta))
-            motor_delta = joint_delta / ratio
+            # Coupled solve in delta space (offsets cancel): the jogged
+            # joint moves by joint_delta, the rest hold. J1-J3 rows are
+            # identity, so those jogs still move exactly one motor.
+            dy = {j: 0.0 for j in ("J1", "J2", "J3",
+                                   "J4", "J5", "J6")}
+            dy[args["joint"]] = joint_delta / ratio
+            dm = {}
+            for j in ("J1", "J2", "J3"):
+                e = self.jog_map[j]
+                dm[(e["brick"], e["port"])] = dy[j]
+            yw = [dy[j] for j in WRIST_JOINTS]
+            mw = [sum(WRIST_C_INV[i][k] * yw[k] for k in range(3))
+                  for i in range(3)]
+            for mp, m in zip(_wrist_motors(self.jog_map), mw):
+                dm[mp] = dm.get(mp, 0.0) + m
+            motor_delta = dm[(brick, port)]
             if abs(motor_delta) < MIN_MOVE_MOTOR_DEG:
                 return {"joint": args["joint"],
                         "joint_delta": joint_delta,
@@ -336,11 +427,25 @@ class _Handler(BaseHTTPRequestHandler):
                         + str(round(motor_delta, 2)) + " deg < "
                         + str(MIN_MOVE_MOTOR_DEG)
                         + " deg minimum; not executed"}
-            before = t.send(brick, "read")["encoders"].get(port, 0.0)
-            target = before + motor_delta
-            t.move_motors({(brick, port): target},
-                          speed=JOG_SPEED_DEG_S)
+            enc = {}
+            for b in t.bricks:
+                enc.update({(b, p): v for p, v in
+                            t.send(b, "read")["encoders"].items()})
+            targets, coupled = {}, []
+            for mp, d in dm.items():
+                if abs(d) < MIN_MOVE_MOTOR_DEG:
+                    continue
+                targets[mp] = enc.get(mp, 0.0) + d
+            before = enc.get((brick, port), 0.0)
+            target = targets[(brick, port)]
+            t.move_motors(targets, speed=JOG_SPEED_DEG_S)
             after = t.send(brick, "read")["encoders"].get(port, 0.0)
+            for mp, tgt in targets.items():
+                if mp == (brick, port):
+                    continue
+                coupled.append({"brick": mp[0], "port": mp[1],
+                                "motor_delta": dm[mp],
+                                "motor_target": tgt})
             return {"joint": args["joint"], "joint_delta": joint_delta,
                     "ratio": ratio, "motor_uid": entry["motor_uid"],
                     "brick": brick, "port": port,
@@ -348,7 +453,8 @@ class _Handler(BaseHTTPRequestHandler):
                     "speed": JOG_SPEED_DEG_S,
                     "executed": True,
                     "before": before, "after": after,
-                    "moved": after - before}
+                    "moved": after - before,
+                    "coupled": coupled}
         if path == "/api/jogmap":
             return {"jog_map": self.jog_map,
                     "overrides": self.jog_overrides}

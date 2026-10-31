@@ -716,7 +716,8 @@ def main(argv=None):
     parser.add_argument("--out", default="runs/stage5c")
     args = parser.parse_args(argv)
 
-    from src.console.mini import load_jog_map
+    from src.console.mini import (default_override_path, load_jog_map,
+                                    read_jog_overrides)
 
     homing_cfg = load_yaml(args.homing)
     sensors = json.loads(pathlib.Path(args.sensors).read_text(
@@ -724,7 +725,11 @@ def main(argv=None):
     bounds = json.loads(pathlib.Path(args.bounds).read_text(
         encoding="utf-8"))
     ports = load_yaml(args.ports)
-    jog_map = load_jog_map(model_path=args.model)
+    # Same wiring the consoles drive with: model map plus the local
+    # jog overrides (corrected ports, GT signs).
+    jog_map = load_jog_map(
+        model_path=args.model,
+        overrides=read_jog_overrides(default_override_path()))
 
     plan, errors, warnings = build_plan(homing_cfg, jog_map, sensors,
                                         bounds, ports)

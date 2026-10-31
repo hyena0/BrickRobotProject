@@ -1,0 +1,8 @@
+# Release-forbidden tracked prefixes (one per line).
+# The guard fails when git tracks anything under these.
+# Listed here (not in check.py) so inference code never carries
+# ground-truth path literals (see tests/test_gt_isolation.py).
+assets/private/
+runs/
+gt/
+eval/ground_truth/

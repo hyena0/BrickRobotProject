@@ -102,7 +102,7 @@ def test_execute_plan_on_fake_bricks(tmp_path):
     assert by_id["J5"]["offset"] is None
     assert by_id["J6"]["status"] == "homed"
     # J5 and J6 share one motor: the stall run parked it at 360.
-    assert by_id["J6"]["offset"] == pytest.approx(0.1429 * 360.0)
+    assert by_id["J6"]["offset"] == pytest.approx(-0.1429 * 360.0)
     out = hp.save_run(record, plan, [], str(tmp_path))
     assert (out / "homing.json").exists()
     assert (out / "homing.md").exists()
@@ -157,7 +157,7 @@ def test_jog_move_clears_stale_latch_first():
         jog_move = hp.make_jog_move(transport)
         pos = jog_move(plan["joints"][0], 5.0)
         assert not left.guards.latched
-        assert pos == pytest.approx(5.0 / -0.1429)
+        assert pos == pytest.approx(5.0 / 0.1429)
     finally:
         transport.close()
 
