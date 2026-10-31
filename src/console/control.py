@@ -551,7 +551,23 @@ def reachable_target(handler, seed=None):
 
 
 def move_joints(handler, q, speed=None, label="goto"):
-    """Range-checked joint move via coupled motor targets."""
+    """Range-checked joint move via coupled motor targets.
+
+    Refuses when any brick reports a latch (send clear_latch first).
+    Homing/connection gating stays client-side so fake-brick demos
+    keep working; the client hides send when disconnected.
+    """
+    latched = []
+    for brick in handler.transport.bricks:
+        try:
+            if bool(handler.transport.send(brick, "read").get("latched")):
+                latched.append(brick)
+        except Exception:
+            pass
+    if latched:
+        raise ValueError("refused: latched on "
+                         + ",".join(latched)
+                         + "; send clear_latch first")
     adopted = {r["joint"]: r["adopted"]
                for r in ranges_payload(handler)["joints"]}
     refusal = check_pose_against_ranges(q, adopted)
@@ -592,6 +608,117 @@ def move_joints(handler, q, speed=None, label="goto"):
     return {"ok": True, "pose": label, "error_deg": errors,
             "max_abs_err": max(abs(v) for v in errors.values()),
             "tcp": [round(float(v), 1) for v in tcp]}
+
+
+def homing_spec():
+    """Per-joint homing config from config/homing.local.yaml."""
+    import yaml
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    try:
+        data = yaml.safe_load(
+            (root / "config" / "homing.local.yaml").read_text(
+                encoding="utf-8")) or {}
+        return data.get("joints", {}) or {}
+    except (OSError, ValueError, ImportError):
+        return {}
+
+
+def write_homing_result(joint, status, offset, note=""):
+    """Merge one joint result into today's homing.json."""
+    day = runs_day_dir()
+    day.mkdir(parents=True, exist_ok=True)
+    path = day / "homing.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        record = {}
+    try:
+        latest = latest_homing_record()
+    except Exception:
+        latest = {}
+    offsets = dict(latest.get("offsets", {}) or {})
+    offsets.update(record.get("offsets", {}) or {})
+    results = [r for r in (record.get("results", []) or [])
+               if r.get("joint") != joint]
+    if offset is not None:
+        offsets[joint] = offset
+    results.append({"joint": joint, "status": status,
+                    "offset": offset, "note": note})
+    record = dict(record)
+    record["offsets"] = offsets
+    record["results"] = results
+    path.write_text(json.dumps(record, indent=1), encoding="utf-8")
+    return record
+
+
+def home_joint(handler, joint, mark=False):
+    """Home one joint: sensor run (real) or simulated (fake bricks).
+
+    Manual joints (J5/J6): mark=True records the current position
+    as zero (offset = -ratio * motor_pos).
+    """
+    spec = homing_spec().get(joint, {}) or {}
+    method = spec.get("method", "manual")
+    if joint not in handler.jog_map:
+        raise ValueError("unknown joint: " + str(joint))
+    entry = handler.jog_map[joint]
+    record = latest_homing_record()
+    offsets = record.get("offsets", {}) or {}
+    if method == "manual" or mark:
+        enc = {}
+        for brick in handler.transport.bricks:
+            try:
+                enc.update(
+                    {(brick, port): motor for port, motor in
+                     handler.transport.send(brick, "read")
+                     ["encoders"].items()})
+            except Exception:
+                pass
+        raw = mini.coupled_joint_readback(
+            enc, handler.jog_map, {}) or {}
+        cur = float(raw.get(joint, 0.0))
+        offset = -float(entry["ratio"]) * float(
+            enc.get((entry["brick"], entry["port"]), 0.0) or 0.0)
+        if cur == 0.0:
+            # No readback (no record yet): fall back to motor raw.
+            offset = -float(entry["ratio"]) * float(
+                enc.get((entry["brick"], entry["port"]), 0.0) or 0.0)
+        write_homing_result(joint, "homed", offset,
+                            "manual mark at %.1f deg" % cur)
+        return {"ok": True, "joint": joint, "method": "manual",
+                "offset": offset}
+    if getattr(handler, "virtual", False):
+        offset = offsets.get(joint, 0.0)
+        write_homing_result(joint, "homed", offset, "simulated")
+        return {"ok": True, "joint": joint, "method": "sensor",
+                "offset": offset, "simulated": True}
+    sensors = joint_sensors()
+    sensor = sensors.get(joint)
+    if isinstance(sensor, dict):
+        sensor = sensor.get("port", sensor.get("sensor"))
+    if not sensor:
+        raise ValueError("no sensor for " + str(joint))
+    direction = int(spec.get("direction", -1) or -1)
+    if direction not in (-1, 1):
+        raise ValueError("direction must be -1 or +1")
+    speed = float(spec.get("speed", 150.0) or 150.0)
+    entry_brick, entry_port = entry["brick"], entry["port"]
+    try:
+        handler.transport.send(entry_brick, "set_guards",
+                               {"rules": [{"sensor": sensor}]})
+        ack = handler.transport.send(
+            entry_brick, "run_target",
+            {"port": entry_port, "target": direction * 720.0,
+             "speed": speed, "until_sensor": sensor})
+    except Exception as e:
+        write_homing_result(joint, "failed", None, str(e))
+        raise ValueError("homing failed: " + str(e))
+    offset = offsets.get(joint)
+    write_homing_result(joint, "homed", offset, "sensor trip")
+    return {"ok": True, "joint": joint, "method": "sensor",
+            "offset": offset,
+            "homed": bool((ack or {}).get("homed", False))}
 
 
 def reproduce_pose(handler, pose_id):
@@ -637,6 +764,52 @@ class _Handler(mini._Handler):
                 else "application/json")
         self.send_response(200)
         self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_render(self, path):
+        # Private reference renders (wrist card); same gate as meshes.
+        import re as _re
+
+        if not self.private_visuals:
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
+        name = path[len("/private/renders/"):]
+        if not _re.fullmatch(r"[A-Za-z0-9_.-]+\.png", name):
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
+        root = pathlib.Path(__file__).resolve().parents[2]
+        target = root / "assets" / "private" / "renders" / name
+        if not target.is_file():
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
+        body = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_evidence(self, path):
+        # IK-check PNG evidence (derived skeletons, not private meshes).
+        import re as _re
+
+        name = path[len("/evidence/"):]
+        if not _re.fullmatch(r"(failures/)?[A-Za-z0-9_.-]+\.png", name):
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
+        root = pathlib.Path(__file__).resolve().parents[2]
+        target = (root / "runs" / "stage5c" / "ik_check_multi"
+                  / name)
+        if not target.is_file():
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
+        body = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -756,6 +929,40 @@ class _Handler(mini._Handler):
             return reachable_target(self, args.get("seed"))
         if path == "/api/table":
             return {"ok": True, "stage": stage_table()}
+        if path == "/api/mode":
+            # virtual: fake bricks (send allowed for demo).
+            # connected: both bricks answer reads.
+            bricks = {}
+            for brick in self.transport.bricks:
+                try:
+                    self.transport.send(brick, "read")
+                    bricks[brick] = True
+                except Exception:
+                    bricks[brick] = False
+            connected = bool(bricks) and all(bricks.values())
+            return {"ok": True,
+                    "virtual": bool(getattr(self, "virtual", False)),
+                    "connected": connected, "bricks": bricks}
+        if path == "/api/home_joint":
+            return home_joint(self, str(args.get("joint", "")),
+                              mark=bool(args.get("mark", False)))
+        if path == "/api/homing_spec":
+            return {"ok": True, "joints": homing_spec()}
+        if path == "/api/verify_report":
+            import pathlib as _pl
+            root = _pl.Path(__file__).resolve().parents[2]
+            rep = root / "runs" / "stage5c" / "ik_check_multi"
+            try:
+                report = json.loads(
+                    (rep / "report.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {"ok": False,
+                        "error": "no report yet"}
+            try:
+                table = (rep / "table.md").read_text(encoding="utf-8")
+            except OSError:
+                table = ""
+            return {"ok": True, "report": report, "table": table}
         if path == "/api/mat_points":
             if not self.private_visuals:
                 return {"ok": False,
@@ -870,8 +1077,11 @@ class _Handler(mini._Handler):
         from urllib.parse import urlparse
 
         parsed = urlparse(self.path).path
-        if parsed == "/":
-            body = PAGE.encode()
+        if parsed in ("/", "/calibration", "/verify"):
+            page_id = {"/": "main", "/calibration": "cal",
+                       "/verify": "verify"}[parsed]
+            body = PAGE.replace("<body>", '<body data-page="%s">'
+                                % page_id, 1).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -883,6 +1093,10 @@ class _Handler(mini._Handler):
             self._serve_static(parsed)
         elif parsed.startswith("/private/visual/"):
             self._serve_private(parsed)
+        elif parsed.startswith("/private/renders/"):
+            self._serve_render(parsed)
+        elif parsed.startswith("/evidence/"):
+            self._serve_evidence(parsed)
         else:
             super().do_GET()
 
@@ -890,10 +1104,12 @@ class _Handler(mini._Handler):
 def create_server(transport, host="127.0.0.1", port=CONTROL_PORT,
                   jog_map=None, override_path=None,
                   direction_path=None, model_doc=None,
-                  console_path=None, private_visuals=None):
+                  console_path=None, private_visuals=None,
+                  virtual=False):
     """Create (not start) the control console server.
 
     Always binds a loopback host; only 127.0.0.1 is supported.
+    virtual=True means fake bricks (send flow allowed for demo).
     """
     if host != "127.0.0.1":
         raise ValueError("control console serves 127.0.0.1 only")
@@ -921,13 +1137,42 @@ def create_server(transport, host="127.0.0.1", port=CONTROL_PORT,
                     "model_doc": model_doc,
                     "zeros": {},
                     "console_path": str(console_path),
-                    "private_visuals": private_visuals})
+                    "private_visuals": private_visuals,
+                    "virtual": bool(virtual)})
     from http.server import ThreadingHTTPServer
 
     return ThreadingHTTPServer((host, port), handler)
 
 
-def build_transport(config):
+class OfflineTransport:
+    """Virtual-only: no bricks answer, every command fails cleanly."""
+
+    bricks = []
+
+    def _fail(self):
+        from src.adapters.pc.mqtt_transport import TransportError
+
+        raise TransportError("offline: no bricks")
+
+    def send(self, brick, cmd, *args, **kwargs):
+        self._fail()
+
+    def move_motors(self, targets, speed=None):
+        self._fail()
+
+    def estop(self):
+        self._fail()
+
+    def clear_latch(self):
+        self._fail()
+
+    def close(self):
+        pass
+
+
+def build_transport(config, offline=False):
+    if offline:
+        return OfflineTransport()
     if config:
         from src.adapters.pc.mqtt_transport import MqttTransport
 
@@ -947,10 +1192,14 @@ def main(argv=None) -> None:
     parser.add_argument("--private-visuals", default=None, metavar="ROBOT",
                         help="serve git-ignored LDraw meshes from "
                              "assets/private/visual_pack/ROBOT")
+    parser.add_argument("--offline", action="store_true",
+                        help="virtual-only: no bricks answer "
+                             "(body follows IK, send hidden)")
     args = parser.parse_args(argv)
-    transport = build_transport(args.config)
+    transport = build_transport(args.config, offline=args.offline)
     server = create_server(transport, port=args.port,
-                           private_visuals=args.private_visuals)
+                           private_visuals=args.private_visuals,
+                           virtual=args.offline or args.config is None)
     print("control console on http://127.0.0.1:" + str(args.port)
           + " (Ctrl-C to stop)")
     try:
@@ -976,12 +1225,32 @@ main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; 
 section { background: #1a1a1a; padding: 10px; border-radius: 6px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 td, th { border: 1px solid #444; padding: 4px 6px; text-align: center; }
-#view3d { width: 100%; height: 420px; display: block; background: #565d66; }
 .unconf { color: #fb0; font-weight: bold; }
 button { margin: 2px; }
 #err { color: #f77; white-space: pre-wrap; }
 .wiz { border: 1px solid #555; padding: 8px; margin-top: 8px; }
 .shell { color: #999; border: 1px dashed #555; padding: 8px; margin-top: 8px; }
+/* Main page: 3D canvas fills the screen under the bar; the panels
+   float above it. Other pages keep the plain grid layout. */
+body[data-page="main"] { overflow: hidden; }
+body[data-page="main"] main { display: block; padding: 0; }
+#viewwrap { display: none; }
+body[data-page="main"] #viewwrap { display: block; position: fixed;
+  left: 0; right: 0; bottom: 0; background: #565d66; }
+body[data-page="main"] #view3d { position: absolute; inset: 0;
+  width: 100%; height: 100%; display: block; }
+.fpanel { position: fixed; z-index: 5; background: rgba(20, 22, 26, 0.88);
+  border: 1px solid #444; padding: 8px 10px; font-size: 13px;
+  max-height: calc(100vh - 140px); overflow: auto; }
+.fpanel h3 { font-size: 13px; margin: 8px 0 4px; }
+.fpanel summary { cursor: pointer; font-size: 13px; }
+#panel-right { right: 10px; width: 320px; }
+#panel-left { left: 10px; bottom: 10px; width: 348px;
+  max-height: 46vh; }
+#viewmenu { position: absolute; top: 8px; left: 8px; z-index: 6;
+  background: rgba(20, 22, 26, 0.88); border: 1px solid #444;
+  padding: 6px 8px; font-size: 12px; max-width: 46vw; }
+#viewmenu label { margin-right: 8px; white-space: nowrap; }
 </style>
 <script type="importmap">
 {"imports": {
@@ -992,32 +1261,91 @@ button { margin: 2px; }
 <body>
 <div id="bar">
   <strong>5C Console</strong>
+  <a href="/">메인</a> <a href="/calibration">보정</a>
+  <a href="/verify">검증</a>
+  <span id="mode">모드: …</span>
   <span id="st-left">좌: …</span><span id="st-right">우: …</span>
   <span id="st-latch">래치: …</span><span id="st-hb">하트비트: …</span>
+  <span id="homedots">호밍: …</span>
+  <a id="cal-link" href="/calibration"
+     style="display:none">보정 페이지에서 호밍하세요</a>
   <button id="estop">E-STOP</button>
   <button id="btn-clear">래치 해제</button>
 </div>
 <main>
-<section><h3>관절 패널</h3><div id="joints">로딩…</div></section>
-<section><h3>3D 보기 (<span id="vsrc-name">기본 도형</span>)</h3>
-<canvas id="view3d"></canvas>
-<div>표시: <select id="vsrc">
+<div id="viewwrap" data-sec="main"><canvas id="view3d"></canvas>
+<div id="glerr"></div>
+<div id="viewmenu">표시:
+<label><input type="checkbox" id="vm-mat" checked>매트</label>
+<label><input type="checkbox" id="vm-tcp" checked>TCP</label>
+<label><input type="checkbox" id="vm-gizmo" checked>기즈모</label>
+<label><input type="checkbox" id="vm-line" checked>TCP→목표</label>
+<label><input type="checkbox" id="vm-reach">도달범위</label>
+<label><input type="checkbox" id="vm-gt">GT</label>
+<label><input type="checkbox" id="vm-prev">이전자세</label>
+<label><input type="checkbox" id="vm-dir">손목방향</label>
+<br>모델: <select id="vsrc">
 <option value="primitives">기본 도형</option>
 <option value="ldraw">LDraw 메시(비공개)</option>
 </select>
-<button id="fitview">화면 맞춤</button></div>
-<div id="glerr"></div>
-<div id="vmsg"></div>
-</section>
-<section><h3>데모 순서</h3>
+<button id="fitview">화면 맞춤</button>
+<span id="vmsg"></span>
+</div>
+</div>
+<div id="panel-right" class="fpanel" data-sec="main">
+<details open><summary>목표 (<span id="vsrc-name">기본 도형</span>)</summary>
+<div>
+<button id="ik-t">이동</button><button id="ik-r">회전</button>
+<button id="ik-x">X</button><button id="ik-y">Y</button>
+<button id="ik-z">Z</button>
+<button id="ik-space">world/local</button>
+<button id="ik-reset">타겟→현재EE</button><br>
+매트 <select id="mat-point"><option>로딩…</option></select>
+<button id="mat-go">매트 목표</button>
+<div id="mat-btns"></div>
+좌표(mm) X<input id="xyz-x" size="6"> Y<input id="xyz-y" size="6">
+Z<input id="xyz-z" size="6"> <button id="xyz-go">목표로</button><br>
+<label><input type="checkbox" id="grip-down">
+집게가 아래를 향함 (위치+집게 방향)</label>
+<button id="ik-tcp">기즈모를 TCP로</button>
+<button id="ik-reach">닿는 목표</button>
+</div>
+</details>
+<details open><summary>실행</summary>
+<div id="ik-stat">수렴 — / 오차 — / 제한 — / 목표(베이스) —</div>
+<div id="send-row">미리보기 확인 후 <button id="send-go" disabled>로봇으로 보내기</button>
+<button id="send-stop">정지</button> <span id="send-msg">대기 중</span></div>
+</details>
+<details><summary>데모 순서</summary>
 <div class="wiz" id="wizdemo">
 <div>호밍 확인 → 안전자세 2개 → 매트 점(아래 번호) → 원위치. 느리게, 한 단계씩 확인.</div>
 매트 점 <input id="demo-points" size="10" value="1,5,9">
 <button id="demo-start">데모 순서 시작</button>
 <div id="demo-msg"></div>
 </div>
+</details>
+</div>
+<div id="panel-left" class="fpanel" data-sec="main">
+<details><summary>관절·모터·IK</summary>
+<div><label><input type="checkbox" id="follow-live" checked>
+실시간 관절값 반영</label></div>
+<div id="joints">로딩…</div>
+<div id="ik-msg">주황 구슬을 드래그하면 뼈대가 따라옵니다</div>
+<div id="ik-live">TCP — / 목표 — / 거리 —</div>
+<div id="preview-dist">미리보기 — / 목표 — / 거리 —</div>
+</details>
+<details><summary>로그</summary><div id="log"></div></details>
+</div>
+<section data-sec="cal"><h3>호밍</h3>
+<div class="wiz" id="wizhome">
+<div>관절별 호밍. J5/J6은 표시 맞춤(현재 위치를 0으로 기록). 손목 기준 그림:</div>
+<div><img id="wrist-img" style="max-width:100%;display:none" alt="손목 기준"></div>
+<div id="home-rows">로딩…</div>
+<div id="home-msg"></div>
+<div><a href="/">메인으로 돌아가기</a></div>
+</div>
 </section>
-<section><h3>M4 방향 마법사</h3>
+<section data-sec="cal"><h3>M4 방향 마법사</h3>
 <div class="wiz" id="wiz4">
 관절 <select id="w4-joint"></select>
 <button id="w4-try">+5&deg; 시도</button>
@@ -1026,36 +1354,13 @@ button { margin: 2px; }
 <div id="w4-msg"></div>
 </div>
 </section>
-<section><h3>IK 타겟</h3>
-<div class="wiz" id="wizik">
-<label><input type="checkbox" id="follow-live" checked>
-실시간 관절값 반영</label><br>
-<button id="ik-t">이동</button><button id="ik-r">회전</button>
-<button id="ik-x">X</button><button id="ik-y">Y</button>
-<button id="ik-z">Z</button>
-<button id="ik-space">world/local</button>
-<button id="ik-reset">타겟→현재EE</button><br>
-<label><input type="checkbox" id="grip-down">
-집게가 아래를 향함 (위치+집게 방향)</label>
-<button id="ik-tcp">기즈모를 TCP로</button>
-<button id="ik-reach">닿는 목표</button>
-<br>매트 <select id="mat-point"><option>로딩…</option></select>
-<button id="mat-go">매트 목표</button>
-<div id="ik-msg">주황 구슬을 드래그하면 뼈대가 따라옵니다</div>
-<div id="ik-live">TCP — / 목표 — / 거리 —</div>
-<div id="ik-stat">수렴 — / 오차 — / 제한 — / 목표(베이스) —</div>
-<label><input type="checkbox" id="show-prev" checked>
-드래그 전 자세(반투명)</label>
-<label><input type="checkbox" id="show-gt" checked>
-GT 뼈대(--private-visuals일 때만)</label>
-</div>
-</section>
-<section><h3>M5 범위 마법사</h3>
+
+<section data-sec="cal"><h3>M5 범위 마법사</h3>
 <div class="wiz" id="wiz5">
 <div id="ranges">로딩…</div>
 </div>
 </section>
-<section><h3>M6 자세 재현</h3>
+<section data-sec="cal"><h3>M6 자세 재현</h3>
 <div class="wiz" id="wiz6">
 자세 <select id="w6-pose"></select>
 <button id="w6-run">재현</button>
@@ -1063,11 +1368,19 @@ GT 뼈대(--private-visuals일 때만)</label>
 <div id="poses">로딩…</div>
 </div>
 </section>
-<section><h3>설정(경계값)</h3>
+<section data-sec="cal"><h3>포트 진단</h3>
+<div class="wiz" id="wizdiag"><div id="diag">로딩…</div></div>
+</section>
+<section data-sec="cal"><h3>설정(경계값)</h3>
 <div class="wiz" id="wcfg"><div id="cfgs">로딩…</div></div>
 </section>
-<section><h3>로그</h3>
-<div class="wiz"><div id="log"></div></div>
+<section data-sec="verify"><h3>IK 시험 결과</h3>
+<div class="wiz" id="wizverify">
+<div id="verify-sum">로딩…</div>
+<div id="verify-table"></div>
+<div id="verify-shots"></div>
+<div id="verify-gt">GT 뼈대 비교는 --private-visuals일 때만 표시됩니다.</div>
+</div>
 </section>
 </main>
 <div id="err"></div>
@@ -1095,6 +1408,12 @@ let STAGE = {table_z_mm: -220.8, center_x_mm: 34.0,
   center_y_mm: 79.5, reach_r_mm: 335.3,
   shoulder_model_mm: [21.8, 79.7, -53.0]};
 const qdeg = {};
+// Send flow: pendingQ = last IK result awaiting send; previewOk =
+// preview drawn + /api/preview range ok. lastOv = latest overview.
+let pendingQ = null, previewOk = false, previewRange = "";
+let lastOv = null, VIRT = false;
+const PAGE_ID = (document.body.dataset &&
+  document.body.dataset.page) || "main";
 const SEGS = [], NODES = []; // limb capsules, joint spheres
 
 async function initModel() {
@@ -1106,6 +1425,9 @@ async function initModel() {
   } catch (err) {
     log("테이블 설정 로드 실패, 기본값 사용");
   }
+  // 3D scene lives on the main page only; cal/verify share
+  // the same template but skip the WebGL build (and its tick).
+  if (PAGE_ID !== "main" || !__realById("view3d")) return;
   const canvas = document.getElementById("view3d");
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
@@ -1311,19 +1633,98 @@ async function initModel() {
   }
   const prevLine = skelLine(0x999999, 0.4);
   const gtLine = skelLine(0xff8800, 0.9);
+  // Encoder actual overlay (magenta). The IK preview is a
+  // translucent ghost of the same body model (see GHOST).
+  const actualLine = skelLine(0xff44ff, 0.9);
   function setSkel(line, pts) {
     const a = line.geometry.attributes.position;
     for (let i = 0; i < 8; i++) a.setXYZ(i, pts[i].x, pts[i].y, pts[i].z);
     a.needsUpdate = true;
     line.visible = true;
   }
+  buildGhostPrims(arm, baseMesh);
+  reach.visible = document.getElementById("vm-reach").checked;
+  dirLine.visible = document.getElementById("vm-dir").checked;
   window._scene = {renderer, scene, camera, controls, arm, tc, target,
                    marker, eeAxes, baseMesh, tcpDot, tgtLine, dirLine,
-                   prevLine, gtLine, matDots, setSkel,
+                   reach, prevLine, gtLine, actualLine, matDots,
+                   setSkel, ghostOn: () => ghostOn,
                    targetArm: p0ee.clone(),
                    prevQ: null, gtAxes: null, rangesAdopted: null,
                    grounded: false};
   requestAnimationFrame(tick);
+}
+// Ghost preview: the same body, translucent, posed by the IK result.
+// ghostOn = connected mode with a pending solution.
+let ghostOn = false;
+const GHOST = {prims: [], nodes: [], base: null, ldraw: []};
+function applyGhost() {
+  const prim = VSRC === "primitives";
+  const showP = ghostOn && prim;
+  const showL = ghostOn && !prim && MESHES.ready;
+  for (const g of GHOST.prims) g.mesh.visible = showP;
+  for (const g of GHOST.nodes) g.mesh.visible = showP;
+  if (GHOST.base) GHOST.base.visible = showP;
+  for (const g of GHOST.ldraw) if (g) g.visible = showL;
+}
+function buildGhostPrims(host, base) {
+  if (!host) return;
+  if (!GHOST.mat) {
+    GHOST.mat = new THREE.MeshStandardMaterial({color: 0x7fb3e8,
+      roughness: 0.6, metalness: 0.1, transparent: true,
+      opacity: 0.4, depthWrite: false});
+  }
+  if (GHOST.prims.length) { applyGhost(); return; }
+  for (const s of SEGS) {
+    const m = new THREE.Mesh(s.mesh.geometry, GHOST.mat);
+    m.matrixAutoUpdate = false;
+    m.visible = false;
+    host.add(m);
+    GHOST.prims.push({mesh: m, local: s.local});
+  }
+  for (const b of NODES) {
+    const m = new THREE.Mesh(b.geometry, GHOST.mat);
+    m.matrixAutoUpdate = false;
+    m.visible = false;
+    host.add(m);
+    GHOST.nodes.push({mesh: m});
+  }
+  // Base envelope is static; mirror its transform once.
+  if (base) {
+    const m = new THREE.Mesh(base.geometry, GHOST.mat);
+    m.matrixAutoUpdate = false;
+    m.matrix.copy(base.matrix);
+    m.visible = false;
+    host.add(m);
+    GHOST.base = m;
+  }
+  applyGhost();
+}
+function buildGhostLdraw() {
+  if (!MESHES.ready || GHOST.ldraw.length) { applyGhost(); return; }
+  const st = window._scene;
+  if (!st) return;
+  if (!GHOST.mat) {
+    GHOST.mat = new THREE.MeshStandardMaterial({color: 0x7fb3e8,
+      roughness: 0.6, metalness: 0.1, transparent: true,
+      opacity: 0.4, depthWrite: false});
+  }
+  GHOST.ldraw = [];
+  for (let i = 0; i < MESHES.groups.length; i++) {
+    const g = MESHES.groups[i];
+    if (!g) { GHOST.ldraw.push(null); continue; }
+    const c = g.clone(true);
+    c.traverse((o) => {
+      if (o.isMesh) {
+        o.material = GHOST.mat;
+        o.matrixAutoUpdate = false;
+      }
+    });
+    c.visible = false;
+    st.arm.add(c);
+    GHOST.ldraw.push(c);
+  }
+  applyGhost();
 }
 let VSRC = "primitives";
 const MESHES = {ready: false, groups: [], urls: {}};
@@ -1346,6 +1747,7 @@ function applyVis() {
   for (const g of MESHES.groups) g.visible = !prim;
   document.getElementById("vsrc-name").textContent =
     prim ? "기본 도형" : "LDraw 메시";
+  applyGhost();
 }
 async function loadMeshes() {
   if (MESHES.ready || MESHES.loading) return;
@@ -1374,6 +1776,7 @@ async function loadMeshes() {
       if (++done === ids.length) {
         MESHES.ready = true;
         window._scene.meshGroups = MESHES.groups;
+        buildGhostLdraw();
         applyVis();
         log("LDraw 메시 로드 완료");
       }
@@ -1413,6 +1816,46 @@ function fitView() {
   st.camera.updateProjectionMatrix();
 }
 document.getElementById("fitview").onclick = () => fitView();
+// Display menu (top-right of the canvas): mat dots, TCP dot,
+// target gizmo and the thin TCP-target line are on; reach envelope,
+// GT skeleton, pre-drag pose and wrist direction are debug (off).
+function fitLayout() {
+  if (PAGE_ID !== "main") return;
+  const bar = document.getElementById("bar");
+  const wrap = document.getElementById("viewwrap");
+  if (bar && wrap) wrap.style.top = bar.offsetHeight + "px";
+  const st = window._scene;
+  const canvas = document.getElementById("view3d");
+  if (st && canvas && canvas.clientWidth > 0) {
+    st.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    st.camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    st.camera.updateProjectionMatrix();
+  }
+}
+window.addEventListener("resize", fitLayout);
+function bindVis(id, fn) {
+  const el = document.getElementById(id);
+  if (el) el.onchange = () => fn(el.checked);
+}
+bindVis("vm-mat", (v) => {
+  const st = window._scene; if (st) st.matDots.visible = v;
+});
+bindVis("vm-tcp", (v) => {
+  const st = window._scene; if (st) st.tcpDot.visible = v;
+});
+bindVis("vm-gizmo", (v) => {
+  const st = window._scene;
+  if (st) { st.target.visible = v; st.tc.visible = v; }
+});
+bindVis("vm-line", (v) => {
+  const st = window._scene; if (st) st.tgtLine.visible = v;
+});
+bindVis("vm-reach", (v) => {
+  const st = window._scene; if (st) st.reach.visible = v;
+});
+bindVis("vm-dir", (v) => {
+  const st = window._scene; if (st) st.dirLine.visible = v;
+});
 function skelNodes(F) {
   // Skeleton nodes: base origin, 6 joint-frame origins, EE point.
   const pts = [new THREE.Vector3(0, 0, 0)];
@@ -1500,6 +1943,36 @@ function tick() {
       MESHES.groups[i].matrixWorldNeedsUpdate = true;
     }
   }
+  // Ghost preview follows the pending IK solution (connected only).
+  if (ghostOn && pendingQ) {
+    try {
+      const gq = MODEL.joints.map((j) => (pendingQ[j.id] || 0) *
+        Math.PI / 180);
+      const Fg = fkine(gq);
+      for (let i = 0; i < 6 && i < GHOST.prims.length; i++) {
+        GHOST.prims[i].mesh.matrix.copy(Fg[i])
+          .multiply(GHOST.prims[i].local);
+        GHOST.prims[i].mesh.matrixWorldNeedsUpdate = true;
+      }
+      for (let i = 0; i < 6 && i < GHOST.nodes.length; i++) {
+        const p = MODEL.joints[i].point;
+        _v.set(p[0], p[1], p[2]).applyMatrix4(Fg[i]);
+        GHOST.nodes[i].mesh.matrix.makeTranslation(_v.x, _v.y, _v.z);
+        GHOST.nodes[i].mesh.matrixWorldNeedsUpdate = true;
+      }
+      if (GHOST.ldraw.length) {
+        if (GHOST.ldraw[0]) {
+          GHOST.ldraw[0].matrix.identity();
+          GHOST.ldraw[0].matrixWorldNeedsUpdate = true;
+        }
+        for (let i = 1; i <= 6 && i < GHOST.ldraw.length; i++) {
+          if (!GHOST.ldraw[i]) continue;
+          GHOST.ldraw[i].matrix.copy(Fg[i - 1]);
+          GHOST.ldraw[i].matrixWorldNeedsUpdate = true;
+        }
+      }
+    } catch (err) { /* ghost is best-effort */ }
+  }
   if (!st.grounded && SEGS.length) {
     // Rest the lowest box on the grid once, aim at its middle.
     st.grounded = true;
@@ -1530,6 +2003,16 @@ function tick() {
     _tS.z.toFixed(1) + "] / 목표 [" + _aS.x.toFixed(1) + ", " +
     _aS.y.toFixed(1) + ", " + _aS.z.toFixed(1) + "] / 거리 " +
     _dist.toFixed(1) + "mm";
+  // Encoder actual overlay (magenta): real pose vs command pose.
+  try {
+    if (lastOv && lastOv.joints && lastOv.joints.every(
+        (j) => j.joint_deg !== null && j.joint_deg !== undefined)) {
+      const aq = lastOv.joints.map((j) => j.joint_deg * Math.PI / 180);
+      st.setSkel(st.actualLine, skelNodes(fkine(aq)));
+    } else {
+      st.actualLine.visible = false;
+    }
+  } catch (err) { /* overlay is best-effort */ }
   controls.update();
   renderer.render(scene, camera);
 }
@@ -1538,9 +2021,11 @@ async function poll() {
   try {
     const o = await post("/api/overview", {});
     lastOk = Date.now();
+    lastOv = o;
     const L = o.latched.left, R = o.latched.right;
     const el = (id, txt, cls) => {
       const e = document.getElementById(id);
+      if (!e) return;
       e.textContent = txt; e.className = cls;
     };
     el("st-left", "좌: " + (L === null ? "끊김" : "연결"),
@@ -1553,7 +2038,9 @@ async function poll() {
     let html = "<table><tr><th>관절</th><th>관절각</th>" +
       "<th>모터각</th><th>홈</th><th>방향</th><th>센서</th>" +
       "<th>조그</th></tr>";
-    const follow = document.getElementById("follow-live").checked;
+    const fEl = document.getElementById("follow-live");
+    const follow = fEl ? fEl.checked : false;
+    const jtEl = document.getElementById("joints");
     for (const j of o.joints) {
       if (follow)
         qdeg[j.joint] = j.joint_deg === null ? 0 : j.joint_deg;
@@ -1571,7 +2058,9 @@ async function poll() {
         "<button data-j='" + j.joint + "' data-d='-5'>−5</button>" +
         jog + "</td></tr>";
     }
-    document.getElementById("joints").innerHTML = html + "</table>";
+    if (jtEl) {
+      jtEl.innerHTML = html + "</table>";
+    }
     document.querySelectorAll("#joints button").forEach((b) => {
       b.onclick = async () => {
         const r = await post("/api/jog",
@@ -1579,6 +2068,39 @@ async function poll() {
         if (!r.ok) alert("jog 실패: " + r.error);
       };
     });
+    // Homing dots + calibration link + mode banner + diag.
+    const dots = o.joints.map((j) =>
+      j.joint + (j.homed ? "●" : "○")).join(" ");
+    el("homedots", "호밍: " + dots, "");
+    const unhomed = o.joints.some((j) => !j.homed);
+    const cl = document.getElementById("cal-link");
+    if (cl) cl.style.display = unhomed ? "" : "none";
+    const conn = (L !== null && R !== null);
+    try {
+      const md = await post("/api/mode", {});
+      if (md.ok) VIRT = !!md.virtual;
+    } catch (err) { /* keep last VIRT */ }
+    el("mode", conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
+                    : "가상만(브릭 미연결)", conn ? "ok" : "bad");
+    const dg = document.getElementById("diag");
+    if (dg) {
+      let dh = "<table><tr><th>관절</th><th>브릭/포트</th>" +
+        "<th>모터각</th><th>관절각</th><th>홈</th><th>센서</th>" +
+        "<th>래치</th></tr>";
+      for (const j of o.joints) {
+        dh += "<tr><td>" + j.joint + "</td><td>" + j.brick + "/" +
+          j.port + "</td><td>" +
+          (j.motor_deg === null ? "?" : j.motor_deg.toFixed(1)) +
+          "</td><td>" +
+          (j.joint_deg === null ? "?" : j.joint_deg.toFixed(1)) +
+          "</td><td>" + (j.homed ? "완료" : "−") + "</td><td>" +
+          (j.sensor === null || j.sensor === undefined ? "−" :
+           j.sensor + ":" + JSON.stringify(j.sensor_state)) +
+          "</td><td>" + (latched ? "걸림" : "없음") + "</td></tr>";
+      }
+      dg.innerHTML = dh + "</table>";
+    }
+    refreshSend();
   } catch (e) {
     document.getElementById("st-hb").textContent = "하트비트: 실패";
     document.getElementById("st-hb").className = "bad";
@@ -1590,11 +2112,13 @@ async function poll() {
   hb.className = "ok";
 }
 document.getElementById("estop").onclick = async () => {
-  await post("/api/estop", {});
-  alert("E-STOP 전송됨");
+  const r = await post("/api/estop", {});
+  alert(r.ok ? "E-STOP 전송됨" : "E-STOP 실패: " + (r.error || "?"));
+  log(r.ok ? "E-STOP 전송됨" : "E-STOP 실패: " + (r.error || "?"));
 };
 document.getElementById("btn-clear").onclick = async () => {
-  await post("/api/clear", {});
+  const r = await post("/api/clear", {});
+  log(r.ok ? "래치 해제됨" : "래치 해제 실패: " + (r.error || "?"));
 };
 document.getElementById("w4-try").onclick = async () => {
   const j = document.getElementById("w4-joint").value;
@@ -1742,7 +2266,7 @@ async function solveIK(seedQ) {
       Math.PI / 180);
     st.setSkel(st.prevLine, skelNodes(fkine(pq)));
     st.prevLine.visible =
-      document.getElementById("show-prev").checked;
+      document.getElementById("vm-prev").checked;
   } catch (err) {
     log("이전 자세 표시 실패");
   }
@@ -1793,8 +2317,42 @@ async function solveIK(seedQ) {
     log("IK 실패: " + (r.error || "?"));
     return;
   }
-  document.getElementById("follow-live").checked = false;
-  r.joints.forEach((jid, i) => { qdeg[jid] = r.ik.q_deg[i]; });
+  // Display rule: virtual-only (bricks unreachable) drives the
+  // body itself to the IK result in real time. When connected, the
+  // body stays on the encoder actual and the result shows on a
+  // translucent ghost model; the line preview is gone.
+  const sol = {};
+  r.joints.forEach((jid, i) => { sol[jid] = r.ik.q_deg[i]; });
+  const solRad = MODEL.joints.map((j) => sol[j.id] * Math.PI / 180);
+  const conn = isConnected();
+  if (!conn) {
+    for (const j of MODEL.joints) qdeg[j.id] = sol[j.id];
+    pendingQ = null; previewOk = false; previewRange = "";
+    ghostOn = false; applyGhost();
+    msg.textContent += " | 가상 추종(본체 이동)";
+  } else {
+    pendingQ = sol;
+    previewOk = !!r.ik.success;
+    previewRange = "";
+    ghostOn = true; applyGhost();
+  }
+  try {
+    // Client-side agreement check: solution TCP (same fkine the
+    // scene draws) vs the gizmo target, in mm.
+    const ptcp = tipOf(fkine(solRad));
+    const pta = st.targetArm;
+    const pdd = Math.sqrt((ptcp.x - pta.x) ** 2 +
+      (ptcp.y - pta.y) ** 2 + (ptcp.z - pta.z) ** 2);
+    const _pS = modelToStage(ptcp), _gS = modelToStage(pta);
+    document.getElementById("preview-dist").textContent =
+      (conn ? "미리보기" : "본체") +
+      " [" + _pS.x.toFixed(1) + ", " + _pS.y.toFixed(1) +
+      ", " + _pS.z.toFixed(1) + "] / 목표 [" + _gS.x.toFixed(1) +
+      ", " + _gS.y.toFixed(1) + ", " + _gS.z.toFixed(1) +
+      "] / 거리 " + pdd.toFixed(1) + "mm";
+  } catch (err) {
+    log("미리보기 표시 실패");
+  }
   setMarker((wasClamped || walked || !r.ik.success) ? 0xff2222 :
     0xff8800);
   msg.textContent = (r.ik.success ? "수렴" : "미수렴(최근접)") +
@@ -1805,16 +2363,18 @@ async function solveIK(seedQ) {
   log("IK " + msg.textContent);
   try {
     const qd = {};
-    for (const j of MODEL.joints) qd[j.id] = qdeg[j.id] || 0;
+    for (const j of MODEL.joints) qd[j.id] = sol[j.id];
     const pv = await post("/api/preview", {q_deg: qd});
     if (pv.ok) {
       const ms = pv.motors.map((m) => m.motor + "=" + m.target).join(" ");
+      previewRange = pv.range;
       msg.textContent += " | 모터 " + ms + " | 범위 " + pv.range;
       log("모터 미리보기: " + ms + " / 범위: " + pv.range);
     }
   } catch (err) {
     log("미리보기 실패: " + (err && err.message ? err.message : err));
   }
+  refreshSend();
   try {
     if (!st.rangesAdopted) {
       const rr = await post("/api/ranges", {});
@@ -1827,8 +2387,9 @@ async function solveIK(seedQ) {
     if (st.rangesAdopted) {
       for (const j of MODEL.joints) {
         const ad = st.rangesAdopted[j.id];
-        const v = qdeg[j.id] || 0;
-        if (ad && (Math.abs(v - ad[0]) < 0.5 || Math.abs(v - ad[1]) < 0.5))
+        const v = sol[j.id];
+        if (v !== undefined && ad &&
+            (Math.abs(v - ad[0]) < 0.5 || Math.abs(v - ad[1]) < 0.5))
           lim.push(j.id);
       }
     }
@@ -1840,8 +2401,10 @@ async function solveIK(seedQ) {
       ", " + sg.z.toFixed(1) + "]mm";
     document.getElementById("ik-stat").textContent = stat;
     log("IK 상태: " + stat);
-    if (document.getElementById("show-gt").checked) {
-      const g = await post("/api/gt_frames", {q_deg: qd});
+    if (document.getElementById("vm-gt").checked) {
+      const gq = {};
+      for (const j of MODEL.joints) gq[j.id] = sol[j.id];
+      const g = await post("/api/gt_frames", {q_deg: gq});
       if (g.ok) {
         const gp = g.points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
         st.setSkel(st.gtLine, gp);
@@ -1856,6 +2419,85 @@ async function solveIK(seedQ) {
     log("IK 상태 표시 실패: " + (err && err.message ? err.message : err));
   }
 }
+const SEND_SPEED_DPS = 15.0;
+// Connected = bricks answer reads recently. Stale or null reads
+// mean virtual-only: the body follows IK itself, send stays hidden.
+function isConnected() {
+  return !!(lastOv && (Date.now() - lastOk < 6000) &&
+    lastOv.latched.left !== null && lastOv.latched.right !== null);
+}
+function sendBlockReason() {
+  if (!lastOv) return "상태 수신 중";
+  if (!isConnected()) return "브릭 미연결(가상만)";
+  const L = lastOv.latched.left, R = lastOv.latched.right;
+  if (L === true || R === true) return "래치 걸림(해제 필요)";
+  if (lastOv.joints.some((j) => !j.homed))
+    return "호밍 안 됨(보정 페이지)";
+  if (!pendingQ || !previewOk) return "유효한 미리보기 없음";
+  if (previewRange && previewRange !== "ok")
+    return "범위 위반: " + previewRange;
+  return "";
+}
+function refreshSend() {
+  const btn = document.getElementById("send-go");
+  const msg = document.getElementById("send-msg");
+  const row = document.getElementById("send-row");
+  if (row) row.style.display = isConnected() ? "" : "none";
+  const reason = sendBlockReason();
+  if (btn) btn.disabled = !!reason;
+  if (msg) msg.textContent =
+    reason || ("보내기 가능 (저속 " + SEND_SPEED_DPS + "°/s)");
+}
+document.getElementById("send-go").onclick = async () => {
+  const reason = sendBlockReason();
+  if (reason) {
+    document.getElementById("send-msg").textContent = reason;
+    return;
+  }
+  let mx = 0;
+  for (const j of MODEL.joints)
+    mx = Math.max(mx, Math.abs((pendingQ[j.id] || 0) -
+      (qdeg[j.id] || 0)));
+  if (mx > 45 && !confirm("한 관절이 " + mx.toFixed(1) +
+      "° 움직입니다. 진행할까요?")) {
+    log("보내기 취소(대이동 확인 거부)");
+    return;
+  }
+  const st = window._scene;
+  const r = await post("/api/goto", {q_deg: pendingQ,
+    speed_dps: SEND_SPEED_DPS, label: "main-send"});
+  if (!r.ok) {
+    document.getElementById("send-msg").textContent =
+      "거부: " + (r.error || "?");
+    log("보내기 거부: " + (r.error || "?"));
+    return;
+  }
+  for (const j of MODEL.joints) qdeg[j.id] = pendingQ[j.id];
+  document.getElementById("follow-live").checked = false;
+  snapGizmoToTCP();
+  pendingQ = null; previewOk = false; previewRange = "";
+  ghostOn = false; applyGhost();
+  log("로봇으로 보내기 완료");
+  refreshSend();
+};
+document.getElementById("send-stop").onclick = async () => {
+  const r = await post("/api/estop", {});
+  log(r.ok ? "정지(E-STOP) 전송됨" : "정지 실패: " + (r.error || "?"));
+};
+document.getElementById("xyz-go").onclick = () => {
+  const st = window._scene;
+  const x = parseFloat(document.getElementById("xyz-x").value);
+  const y = parseFloat(document.getElementById("xyz-y").value);
+  const z = parseFloat(document.getElementById("xyz-z").value);
+  if ([x, y, z].some((v) => isNaN(v))) {
+    document.getElementById("ik-msg").textContent =
+      "좌표 입력이 숫자가 아닙니다";
+    return;
+  }
+  st.target.position.copy(st.arm.localToWorld(stageToModel(
+    {x: x, y: y, z: z})));
+  solveIK();
+};
 document.getElementById("ik-t").onclick = () => {
   window._scene.tc.setMode("translate");
 };
@@ -1922,6 +2564,21 @@ async function loadMat() {
       d.matrixAutoUpdate = false;
       d.matrix.makeTranslation(p.x, p.y, p.z);
       st.matDots.add(d);
+    }
+    // Mat point shortcut buttons 1..9 (same as select + go).
+    const mb = document.getElementById("mat-btns");
+    if (mb) {
+      mb.innerHTML = "";
+      for (const p of MAT.points) {
+        const b = document.createElement("button");
+        b.textContent = p.n;
+        b.title = "매트 " + p.n;
+        b.onclick = () => {
+          document.getElementById("mat-point").value = String(p.n);
+          document.getElementById("mat-go").click();
+        };
+        mb.appendChild(b);
+      }
     }
     // Riser box: table (model table_z) up to the mat plane.
     const xs = MAT.points.map((p) => p.x);
@@ -2064,10 +2721,141 @@ async function refreshConfig() {
     };
   });
 }
+async function renderHoming() {
+  const box = document.getElementById("home-rows");
+  if (!box) return;
+  try {
+    const spec = await post("/api/homing_spec", {});
+    const o = await post("/api/overview", {});
+    const homed = {};
+    if (o.ok) for (const j of o.joints) homed[j.joint] = j.homed;
+    let html = "";
+    const rows = spec.ok && spec.joints
+      ? Object.entries(spec.joints) : [];
+    for (const [jid, jspec] of rows) {
+      const method = (jspec && jspec.method) || "manual";
+      html += "<div>" + jid + " [" + method + "] " +
+        (homed[jid] ? "완료" : "미완") + " " +
+        "<button data-home='" + jid + "'>호밍</button> " +
+        "<button data-mark='" + jid + "'>현재를 0으로</button>" +
+        "<span id='home-msg-" + jid + "'></span></div>";
+    }
+    box.innerHTML = html;
+    box.querySelectorAll("[data-home]").forEach((b) => {
+      b.onclick = async () => {
+        const m = document.getElementById("home-msg-" + b.dataset.home);
+        const r = await post("/api/home_joint",
+          {joint: b.dataset.home, mark: false});
+        if (m) m.textContent = r.ok
+          ? "결과: " + JSON.stringify({offset: r.offset,
+              method: r.method})
+          : "실패: " + (r.error || "?");
+        poll();
+      };
+    });
+    box.querySelectorAll("[data-mark]").forEach((b) => {
+      b.onclick = async () => {
+        const m = document.getElementById("home-msg-" + b.dataset.mark);
+        const r = await post("/api/home_joint",
+          {joint: b.dataset.mark, mark: true});
+        if (m) m.textContent = r.ok
+          ? "0으로 표시됨(offset " + r.offset + ")"
+          : "실패: " + (r.error || "?");
+        poll();
+      };
+    });
+    if (!spec.ok)
+      box.innerHTML += "<div>호밍 명세 실패: " + spec.error + "</div>";
+  } catch (err) {
+    box.innerHTML = "호밍 로드 실패";
+  }
+}
+async function renderVerify() {
+  if (!document.getElementById("verify-table")) return;
+  try {
+    const r = await post("/api/verify_report", {});
+    if (!r.ok) {
+      document.getElementById("verify-table").textContent =
+        "보고서 로드 실패: " + r.error;
+      return;
+    }
+    const rep = r.report || null;
+    if (!rep) {
+      document.getElementById("verify-table").textContent =
+        "아직 검증 보고서가 없습니다(시뮬레이션 산출 후 표시)";
+      return;
+    }
+    // Report shape: runs/stage5c/ik_check_multi/report.json
+    // {targets: [{id, kind, tcp_err_mm, dq, base_moved,
+    // at_limit, pass, reason}], pass_reachable, pass_unreachable}.
+    let html = "<table><tr><th>목표</th><th>종류</th>" +
+      "<th>TCP 오차mm</th><th>밑동 관절</th><th>통과</th>" +
+      "<th>사유</th></tr>";
+    for (const t of (rep.targets || [])) {
+      const dq = (t.dq || []).map((v) => (+v).toFixed(1)).join(",");
+      html += "<tr><td>" + t.id + "</td><td>" + (t.kind || "") +
+        "</td><td>" + t.tcp_err_mm + "</td><td>" +
+        (t.base_moved || []).join(",") + " [" + dq + "]" +
+        "</td><td>" + (t.pass ? "PASS" : "FAIL") + "</td><td>" +
+        (t.reason || "") + "</td></tr>";
+    }
+    html += "</table><div>닿는 목표 통과 " +
+      JSON.stringify(rep.pass_reachable) + " / 닿지 않는 목표 " +
+      JSON.stringify(rep.pass_unreachable) + "</div>";
+    if (rep.images && rep.images.length) {
+      html += "<div>증거: " + rep.images.map((im) =>
+        "<a href='" + im.url + "'>" + im.name + "</a>").join(" ") + "</div>";
+    }
+    try {
+      const g = await post("/api/gt_frames",
+        {q_deg: {J1: 0, J2: 0, J3: 0, J4: 0, J5: 0, J6: 0}});
+      html += "<div>GT 뼈대: " + (g.ok
+        ? "사용 가능 — 메인 3D의 GT 표시로 겹쳐 비교하세요"
+        : "비공개(--private-visuals 필요)") + "</div>";
+    } catch (err) {
+      html += "<div>GT 뼈대: 확인 실패</div>";
+    }
+    document.getElementById("verify-table").innerHTML = html;
+  } catch (err) {
+    document.getElementById("verify-table").textContent = "로드 실패";
+  }
+}
+// Page split: cal/verify pages lack main-only controls; absorb lookups
+// with a detached element so shared handlers never throw.
+const __realById = document.getElementById.bind(document);
+document.getElementById = (id) =>
+  __realById(id) || document.createElement("div");
 initModel().then(() => {
-  poll(); setInterval(poll, 2000);
-  refreshRanges(); refreshPoses(); refreshConfig(); refreshVisual();
-  loadMat();
+  // Show only this page's sections (log section has no data-sec
+  // and stays visible everywhere).
+  document.querySelectorAll("[data-sec]").forEach((s) => {
+    if (s.dataset.sec !== PAGE_ID) s.style.display = "none";
+  });
+  const pg = PAGE_ID;
+  if (pg === "main") {
+    poll(); setInterval(poll, 2000);
+    refreshRanges(); refreshPoses(); refreshConfig();
+    refreshVisual(); loadMat();
+    fitLayout();
+  } else {
+    poll(); setInterval(poll, 3000);
+    if (pg === "cal") {
+      // M5/M6/config panels live on the cal page.
+      refreshRanges(); refreshPoses(); refreshConfig();
+      renderHoming();
+      const wrist = document.getElementById("wrist-img");
+      if (wrist) {
+        wrist.src = "/private/renders/wrist_zero.png";
+        wrist.style.display = "";
+        wrist.onerror = () => { wrist.style.display = "none"; };
+      }
+      setInterval(() => {
+        if (document.getElementById("home-rows").dataset.auto !== "0")
+          renderHoming();
+      }, 10000);
+    }
+    if (pg === "verify") renderVerify();
+  }
 });
 </script>
 </body>

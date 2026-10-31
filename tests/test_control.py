@@ -454,3 +454,124 @@ def test_http_serves_page_and_vendored_three(tmp_path):
             server.server_close()
     finally:
         transport.close()
+
+
+def _tmp_runs(monkeypatch, tmp_path):
+    day = tmp_path / "runs"
+    monkeypatch.setattr(ctl, "runs_day_dir", lambda base=None: day)
+    monkeypatch.setattr(ctl, "latest_homing_record",
+                        lambda base=None: ctl.read_json(
+                            day / "homing.json", {}))
+    return day
+
+
+def test_goto_refused_latched(handler, tmp_path, monkeypatch):
+    _tmp_runs(monkeypatch, tmp_path)
+    real_send = handler.transport.send
+
+    def fake_send(brick, cmd, *a, **k):
+        r = real_send(brick, cmd, *a, **k)
+        if cmd == "read":
+            r = dict(r)
+            r["latched"] = True
+        return r
+
+    monkeypatch.setattr(handler.transport, "send", fake_send)
+    q = {j: 0.0 for j in handler.jog_map}
+    status, res = handler.dispatch_api("/api/goto", {"q_deg": q})
+    assert status == 400 and "latched" in res["error"]
+
+
+def test_offline_virtual_only_refuses_motion():
+    from src.console import control as ctl2
+    h = ctl._Handler.__new__(ctl._Handler)
+    h.transport = ctl2.OfflineTransport()
+    h.jog_map = load_jog_map(overrides={})
+    h.jog_overrides = {}
+    h.direction_path = "/tmp/never-direction.json"
+    h.model_doc = load_model("models/robot_inferred.json")
+    h.zeros = {}
+    h.console_path = "/tmp/never-console.json"
+    h.private_visuals = None
+    h.virtual = True
+    status, res = h.dispatch_api("/api/mode", {})
+    assert status == 200 and res["connected"] is False
+    assert res["virtual"] is True
+    status, res = h.dispatch_api(
+        "/api/overview", {})
+    assert status == 200
+    assert res["latched"] == {"left": None, "right": None}
+    assert all(j["joint_deg"] is None for j in res["joints"])
+    q = {j: 0.0 for j in h.jog_map}
+    status, res = h.dispatch_api("/api/goto", {"q_deg": q})
+    assert status == 500 and "offline" in res["error"]
+
+
+def test_mode_virtual_and_connected(handler):
+    handler.virtual = False
+    status, res = handler.dispatch_api("/api/mode", {})
+    assert status == 200 and res["connected"] is True
+    assert res["virtual"] is False
+    handler.virtual = True
+    status, res = handler.dispatch_api("/api/mode", {})
+    assert status == 200 and res["virtual"] is True
+    assert res["connected"] is True
+
+
+def test_home_joint_manual_and_sensor_simulated(handler, tmp_path,
+                                               monkeypatch):
+    _tmp_runs(monkeypatch, tmp_path)
+    status, res = handler.dispatch_api("/api/home_joint",
+                                       {"joint": "J5", "mark": True})
+    assert status == 200 and res["ok"] and res["method"] == "manual"
+    handler.virtual = True
+    status, res = handler.dispatch_api("/api/home_joint",
+                                       {"joint": "J1", "mark": False})
+    assert status == 200 and res["ok"] and res.get("simulated") is True
+    assert "J5" in ctl.latest_homing_record().get("offsets", {})
+
+
+def test_verify_report_target_fields(handler):
+    # Contract with renderVerify in control.py: each target needs
+    # the keys the page reads without defaults.
+    status, res = handler.dispatch_api("/api/verify_report", {})
+    assert status == 200
+    if not res.get("ok"):
+        pytest.skip("no local ik_check_multi report")
+    targets = res["report"].get("targets")
+    assert isinstance(targets, list) and targets
+    for t in targets:
+        assert {"id", "tcp_err_mm", "pass"} <= set(t), t.get("id")
+
+
+def test_homing_spec_shape(handler):
+    status, res = handler.dispatch_api("/api/homing_spec", {})
+    assert status == 200 and res["ok"]
+    assert isinstance(res["joints"], dict)
+    assert set(res["joints"]) >= {"J1", "J5", "J6"}
+
+
+def test_pages_share_server_state(handler, tmp_path, monkeypatch):
+    _tmp_runs(monkeypatch, tmp_path)
+    handler.virtual = True
+    status, res = handler.dispatch_api("/api/home_joint",
+                                       {"joint": "J5", "mark": True})
+    assert status == 200 and res["ok"]
+    h2 = ctl._Handler.__new__(ctl._Handler)
+    h2.transport = handler.transport
+    h2.jog_map = handler.jog_map
+    h2.jog_overrides = handler.jog_overrides
+    h2.override_path = handler.override_path
+    h2.direction_path = handler.direction_path
+    h2.model_doc = handler.model_doc
+    h2.zeros = {}
+    h2.console_path = handler.console_path
+    h2.private_visuals = None
+    h2.virtual = True
+    assert h2.transport is handler.transport
+    rec = ctl.latest_homing_record()
+    assert "J5" in rec.get("offsets", {})
+    s1, m1 = handler.dispatch_api("/api/mode", {})
+    s2, m2 = h2.dispatch_api("/api/mode", {})
+    assert (s1, m1["connected"]) == (200, True)
+    assert (s2, m2["connected"]) == (200, True)
