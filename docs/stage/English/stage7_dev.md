@@ -239,6 +239,45 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
 - assemble: attempted, BLOCKED — FileNotFoundError pred_C_tbot.json (no
   coupling inference path as-is) and no T-Bot ports file. Exact errors kept.
 
+## T.3A MR JOS-only assumptions (audit, no fixes)
+
+- joints_spark PROMPT: "known drive gaps" (J2/149, J1 slew, differential
+  wrist), "typically 6 joints", "fewer than 4 is under-selection".
+- build_topology: RING140 virtual gear + p000522 copy + z=-143.0 + "D1";
+  manual edge p000812×p000802 @16.966; J5 096/095; confirmed_mapping
+  p000148→J3, p000149→J2; serial D0→ order; turntable-half logic.
+- assemble: type hardcoded revolute; EE default link "D6"; coupling text in
+  joint degrees; motor default medium. Neighbours: FK/IK/MJCF revolute-only.
+- Fixed in T.3B/C instead: generic prompt profile; prismatic schema +
+  assemble type carry-through (default revolute).
+
+## T.3B generic prompt + MR JOS comparison
+
+- Added `--prompt-profile generic` (legacy prompt byte-identical; test pins
+  it). Generic takes movement count only from --stage3 user_movements.
+- MR JOS generic rerun (run-id stage7-mrjos-generic, new dir, baseline
+  untouched): 4 selected + 6 dropped + 22 rejected, 1 attempt, consistency
+  OK, lore-free reasons. Cost: 1 call (within order-$0.1 estimate).
+- Comparison vs legacy joints path (r3, 6 selected): 3 exact (J1, J5-, J6-
+  interfaces, 0.00 mm/deg) + 1 near (J3-interface, 64 mm off, axis
+  antiparallel = same line). Legacy J2-void + J4 not selected (no count
+  push). Differences are selection judgment, not regressions: legacy code
+  path untouched (test-pinned), baseline files untouched.
+
+## T.3C linear joints (additive: src/tools/linear.py, schema, 1-line carry)
+
+- check_rack_mesh (spur + travel axis + tooth line + pitch radius rule):
+  T-Bot 0 meshes (racks disengaged in CAD — recorded, not fixed).
+- trace_chain: 200-link strand, pitch 6.4 mm, loop 1274.8 mm; closure gap
+  (dead end p000767 + spur p000766; 25 parts off-path — turnaround at
+  sprockets engages teeth, not links).
+- Sprockets: 2×94925 16T (102.4 mm/rev) + 3648b p000009 24T (153.6 mm/rev,
+  M1 shaft-direct 1:1 pending human port confirm).
+- motor→sprocket graph paths: none (chain hops aren't graph edges) —
+  mm/motor-rev uncomputable as-is (recorded gap).
+- Catalog data: linear_axis on both racks; tooth_line_offset on 18942.
+  Schema accepts prismatic; assemble carries type (default revolute).
+
 ## T.3 re-proposal (after T.2 + approvals)
 
 - Same two extensions, tightened inputs: rack tooth lines + 3.2 mm pitch are
