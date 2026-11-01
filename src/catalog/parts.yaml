@@ -331,7 +331,11 @@
   axis_local: null
   axle_length: null
   category: rack
-  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam Housing; straight rack (not curved); teeth built from boxes, 32T by 1x14 family profile and 8-LDU periodicity shared with 18942; pitch 8 LDU; source library'
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam Housing; straight rack (not curved); teeth built from boxes, 32T by 1x14 family profile and 8-LDU periodicity shared with 18942; pitch 8 LDU; travel +X local; source library'
+  linear_axis:
+  - 1
+  - 0
+  - 0
   gear_kind: null
   holes: []
   motor: null
@@ -341,7 +345,15 @@
   axis_local: null
   axle_length: null
   category: rack
-  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam; straight rack (not curved); 32 toothr placements at 8.0 LDU counted in geometry; pitch 8 LDU = 3.2 mm; source library'
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam; straight rack (not curved); 32 toothr placements at 8.0 LDU counted in geometry; pitch 8 LDU = 3.2 mm; travel +X local, tooth line at local y=-22.5; source library'
+  linear_axis:
+  - 1
+  - 0
+  - 0
+  tooth_line_offset:
+  - 0.0
+  - -22.5
+  - 0.0
   gear_kind: null
   holes: []
   motor: null

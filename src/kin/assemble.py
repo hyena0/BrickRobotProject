@@ -42,7 +42,8 @@ def assemble(joints_path: str, coupling_path: str, ports_path: str,
 
     joints = []
     for j in joints_doc["joints"]:
-        joints.append({"id": j["id"], "type": "revolute",
+        joints.append({"id": j["id"],
+                       "type": j.get("type", "revolute"),
                        "parent": j["parent"], "child": j["child"],
                        "axis": [float(x) for x in j["axis"]],
                        "point_mm": [float(x) for x in j["point_mm"]],

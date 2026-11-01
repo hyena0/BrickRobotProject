@@ -43,8 +43,9 @@ def validate_links_joints(doc: dict) -> list[str]:
                     "point_mm", "confidence", "reason"):
             if key not in joint:
                 errors.append(f"joints[{i}] missing key: {key}")
-        if joint.get("type") != "revolute":
-            errors.append(f"joints[{i}].type must be 'revolute'")
+        if joint.get("type") not in ("revolute", "prismatic"):
+            errors.append(
+                f"joints[{i}].type must be 'revolute' or 'prismatic'")
         if joint.get("parent") not in link_ids:
             errors.append(f"joints[{i}].parent is not a known link")
         if joint.get("child") not in link_ids:
