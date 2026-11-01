@@ -100,3 +100,29 @@
   on S1..S6. No domain randomization beyond +-10 mm camera jitter.
 - Real-robot execution deliberately excluded from this stage
   (spare-day work, see `stage6_physical_plan.ko.md`).
+
+## Session log (2026-11-01, sens + privacy hardening)
+- sens NameError (`os` missing in `sens_instructions`): added the
+  import. Same-class prevention: pyflakes F821/F401 gate as
+  `test_vla_sources_pass_pyflakes` (run before any run command).
+  The cleanup itself caught one more self-made F821 in `demo.py`.
+- Removed 11 unused imports across `src/vla` (trial_modal,
+  evaluate, scene, demo, to_lerobot, twin). Suites: 68 passed,
+  1 skipped.
+- Upload privacy: new public `src/vla/slot_seeds.json` (6 slots +
+  nearest measured seeds, derived). `scene/demo/to_lerobot/twin/
+  trial_modal` now use it; nothing remote reads
+  `assets/private/mat_points.json` except the gated console
+  endpoint. Image bakes `src`, `config/sim_camera.yaml` only,
+  `models`, `packages`, `runs/vla/6.0`.
+- Baked set verified: `models/robot_inferred.{json,xml}` (2 KB
+  kinematics), `packages/robot_inferred/robot_package.json`.
+  No `.ldr`/`.io`/`visual_pack`/JOS content; model JSON has no
+  base64/vertices/mesh refs. `_check_upload_list` blocks execution
+  on `assets/private`, `.local.`, `visual_pack/`, `.ldr`, `.io`,
+  `/renders`, `inventory.local`.
+- `main --which sens` now saves the full JSON to
+  `runs/vla/sens-<ts>.json` and prints only the
+  `summarize_sens` verdict.
+- Spare-day plan written separately (no implementation):
+  `docs/stage/Korean/stage6_physical_plan.ko.md`.
