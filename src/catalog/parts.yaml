@@ -139,6 +139,16 @@
   motor: null
   review: false
   teeth: null
+11955.dat:
+  axis_local: null
+  axle_length: null
+  category: gear
+  evidence: 'title: Technic Gear 8 Tooth Reinforced Sliding; teeth from title, kind unmeasured; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: 8
 14720.dat:
   axis_local:
   - 0
@@ -304,6 +314,36 @@
   motor: null
   review: false
   teeth: 60
+18940.dat:
+  axis_local: null
+  axle_length: null
+  category: rack
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam Housing; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+18942.dat:
+  axis_local: null
+  axle_length: null
+  category: rack
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+22127.dat:
+  axis_local: null
+  axle_length: null
+  category: brick
+  evidence: 'title: Electric Control+ Hub; hub as brick per EV3 95646 precedent; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
 22961.dat:
   axis_local:
   - 0
@@ -360,6 +400,17 @@
   holes: []
   motor: null
   review: false
+  teeth: null
+24375.dat:
+  axis_local: null
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic Rubber Pin for Chain Tread 38; rubber implies friction; T-Bot data'
+  friction: true
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
   teeth: null
 26287.dat:
   axis_local:
@@ -473,6 +524,16 @@
   holes: []
   motor: null
   review: false
+  teeth: null
+32002.dat:
+  axis_local: null
+  axle_length: null
+  category: pin
+  evidence: 'title: Technic Pin 3/4; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
   teeth: null
 32013.dat:
   axis_local:
@@ -1410,6 +1471,16 @@
   motor: null
   review: false
   teeth: null
+3711.dat:
+  axis_local: null
+  axle_length: null
+  category: other
+  evidence: 'title: Technic Chain Link; articulating link, neutral category; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
 3713.dat:
   axis_local: null
   axle_length: null
@@ -1423,6 +1494,26 @@
     - 0
     - 0
     - 0
+  motor: null
+  review: true
+  teeth: null
+3749.dat:
+  axis_local: null
+  axle_length: null
+  category: axle
+  evidence: 'title: Technic Axle Pin; category mirrors catalogued 43093; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+3873.dat:
+  axis_local: null
+  axle_length: null
+  category: other
+  evidence: 'title: Technic Chain Tread 17; articulating tread, neutral category; T-Bot data'
+  gear_kind: null
+  holes: []
   motor: null
   review: true
   teeth: null
@@ -1524,6 +1615,16 @@
     - -20.0
   motor: null
   review: false
+  teeth: null
+39794.dat:
+  axis_local: null
+  axle_length: null
+  category: frame
+  evidence: 'title: Technic, Liftarm 7 x 11 Open Center Frame Thick; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
   teeth: null
 40490.dat:
   axis_local:
@@ -1757,6 +1858,16 @@
   motor: null
   review: false
   teeth: null
+43857.dat:
+  axis_local: null
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic Beam 2; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
 44294.dat:
   axis_local:
   - 1
@@ -1989,6 +2100,36 @@
     - -30.0
   motor: null
   review: false
+  teeth: null
+48989.dat:
+  axis_local: null
+  axle_length: null
+  category: connector
+  evidence: 'title: Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins; category mirrors catalogued 32184/42003; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+50450.dat:
+  axis_local: null
+  axle_length: 32
+  category: axle
+  evidence: 'title: Technic Axle 32; length from title; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+54696.dat:
+  axis_local: null
+  axle_length: null
+  category: motor
+  evidence: 'title: Electric, Motor SPIKE Prime, Small Angular; size class small is new (EV3 code paths expect large/medium); T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: small
+  review: true
   teeth: null
 59443.dat:
   axis_local:
@@ -2545,6 +2686,16 @@
   motor: null
   review: false
   teeth: null
+65249.dat:
+  axis_local: null
+  axle_length: 2
+  category: axle
+  evidence: 'title: Technic, Axle 2L with Pin without Friction Ridges Lengthwise; category mirrors catalogued 18651; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
 6536.dat:
   axis_local:
   - 1
@@ -2673,6 +2824,26 @@
     - 20.0
   motor: null
   review: false
+  teeth: null
+71710.dat:
+  axis_local: null
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm 1 x 15 Thick, Perpendicular Holes; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
+  teeth: null
+73507.dat:
+  axis_local: null
+  axle_length: null
+  category: beam
+  evidence: 'title: Technic, Liftarm, Modified Perpendicular Holes Thick 1 x 11; T-Bot data'
+  gear_kind: null
+  holes: []
+  motor: null
+  review: true
   teeth: null
 87082.dat:
   axis_local:
