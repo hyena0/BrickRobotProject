@@ -37,7 +37,7 @@ def _convert_matrix(a: list[float]) -> list[list[float]]:
 def parse_type1(line: str, uid: str) -> dict | None:
     """Parse one type-1 line. Returns None for non-type-1 lines."""
     tokens = line.split()
-    if len(tokens) != 15 or tokens[0] != "1":
+    if len(tokens) < 15 or tokens[0] != "1":
         return None
     try:
         nums = [float(t) for t in tokens[1:14]]
@@ -46,9 +46,11 @@ def parse_type1(line: str, uid: str) -> dict | None:
     colour = tokens[1] if "." not in tokens[1] and "e" not in tokens[1].lower() \
         else str(int(nums[0]))
     x, y, z = nums[1], nums[2], nums[3]
+    # The part ref is the rest of the line: MPD sub-model names
+    # (e.g. Studio groups) may contain spaces.
     return {
         "uid": uid,
-        "part_id": tokens[14].lower(),
+        "part_id": " ".join(tokens[14:]).lower(),
         "colour": colour,
         "position_mm": _convert_point(x, y, z),
         "rotation": _convert_matrix(nums[4:13]),
@@ -105,9 +107,9 @@ def parse_text(text: str) -> list[dict]:
             if not s.startswith("1 "):
                 continue
             tokens = s.split()
-            if len(tokens) != 15:
+            if len(tokens) < 15:
                 continue
-            ref = tokens[14].lower()
+            ref = " ".join(tokens[14:]).lower()
             if ref in blocks and ref not in stack:
                 # Sub-model reference: recurse with composed transform.
                 counter += 1
@@ -127,10 +129,15 @@ def parse_text(text: str) -> list[dict]:
 
     main = blocks.get("main", [])
     # A bare model file whose only block is the file itself: fall back to
-    # the block holding the most type-1 lines.
+    # the first FILE block (MPD main model), else the block holding the
+    # most type-1 lines.
     if not any(line.strip().startswith("1 ") for line in main):
-        main = max(blocks.values(),
-                   key=lambda b: sum(l.strip().startswith("1 ") for l in b))
+        file_blocks = [b for n, b in blocks.items() if n != "main"]
+        main = next(
+            (b for b in file_blocks
+             if any(l.strip().startswith("1 ") for l in b)),
+            max(blocks.values(),
+                key=lambda b: sum(l.strip().startswith("1 ") for l in b)))
     emit(main, [])
     # Renumber uids sequentially (recursion consumed placeholder numbers).
     for i, part in enumerate(parts, 1):

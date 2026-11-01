@@ -87,6 +87,29 @@ def test_parser_flattens_submodels_without_names():
     assert not any("sub" in p["uid"] for p in parts)
 
 
+def test_parser_spaced_submodel_names_and_root_first():
+    # Studio MPD sub-model names may contain spaces: the part ref is
+    # the rest of the line after the 13 numbers, not exactly 1 token.
+    # The root is the first FILE block, not the block with the most
+    # type-1 lines (a leaf like Chain would otherwise win).
+    text = ("0 FILE model.io\n"
+            "1 0 0 0 0 1 0 0 0 1 0 0 0 1 my submodel\n"
+            "0 NOFILE\n"
+            "0 FILE my submodel\n"
+            "1 0 20 0 0 1 0 0 0 1 0 0 0 1 gear8t.dat\n"
+            "1 0 0 0 40 1 0 0 0 1 0 0 0 1 gear16t.dat\n"
+            "0 NOFILE\n"
+            "0 FILE decoy block\n"
+            "1 0 0 0 0 1 0 0 0 1 0 0 0 1 decoyA.dat\n"
+            "1 0 40 0 0 1 0 0 0 1 0 0 0 1 decoyB.dat\n"
+            "1 0 80 0 0 1 0 0 0 1 0 0 0 1 decoyC.dat\n"
+            "0 NOFILE\n")
+    parts = parse_text(text)
+    assert {p["part_id"] for p in parts} == {"gear8t.dat", "gear16t.dat"}
+    by_id = {p["part_id"]: p for p in parts}
+    assert by_id["gear8t.dat"]["position_mm"][0] == pytest.approx(8.0)
+
+
 def test_gears_mesh_at_expected_distance():
     parts = parse_file(os.path.join(FIX, "gears.ldr"))
     a, b = parts[0]["uid"], parts[1]["uid"]
