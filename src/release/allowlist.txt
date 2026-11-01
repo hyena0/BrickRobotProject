@@ -1,0 +1,13 @@
+# Release-guard allowlist: tracked paths that look private but are
+# intentionally committed. Exact path match; rationale after " # ".
+# Loaded by src/release/check.py main(); unit tests pass allow=... directly.
+
+assets/modules/M_base_yaw/module.ldr # 5D-generator-authored synthetic module (header "Author: 5D generator", generic catalog parts only, read by scripts/build_modules.py); not extracted from MR JOS
+assets/modules/M_pitch/module.ldr # same as M_base_yaw
+tests/fixtures/axle_hole.ldr # hand-made minimal test input (header "0 Fixture", Stage0/1)
+tests/fixtures/gears.ldr # hand-made minimal test input (header "0 Fixture", Stage0/1)
+tests/fixtures/rotated.ldr # hand-made minimal test input (header "0 Fixture", Stage0/1)
+tests/fixtures/train.ldr # hand-made minimal test input (header "0 Fixture", Stage0/1)
+tests/fixtures/turntable.ldr # hand-made minimal test input (header "0 Fixture", Stage0/1)
+src/release/check.py # self-match: file contains its own CDN-regex source text
+tests/test_release.py # self-match: file contains intentional api_key fixture string

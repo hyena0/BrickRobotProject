@@ -10,6 +10,14 @@ eval/ground_truth/
 runs/
 3D models/
 
+# Release-forbidden: ground truth, generated 5D outputs, error snapshot
+gt/
+generated_robots/**/*.blend
+generated_robots/**/*.glb
+generated_robots/**/robot*.ldr
+generated_robots/**/module.ldr
+tests/model_links_stage3error.blend
+
 # Python
 __pycache__/
 *.pyc

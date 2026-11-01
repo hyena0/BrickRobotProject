@@ -469,3 +469,35 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   joints + prismatic FK/IK/closed-form/MuJoCo (20/20); motion figures;
   T-Bot console (virtual-only, mm panel, gizmo IK, LDraw pack D0..D3
   with confirmed 2-part plunger); LDraw auto-detect (MR JOS + T-Bot).
+
+## T-Bot permission publication (designer glaysche, Nov 1 2026)
+
+- Permission covers: rebuilt-model renders (AI input + 3-min demo
+  video) and physical robot in video. NOT covered: README images,
+  console mesh captures, original/mesh redistribution. Recorded in
+  assets/public_models/tbot/PERMISSION.md (verbatim original).
+- Public now: pack_home/posed renders (+caption option in new
+  scripts/render_tbot_pack.py). Motion figures, console captures,
+  .io/.ldr/.mpd/.glb stay private. Analysis numerics public by owner
+  decision. New files uncommitted (no commit asked).
+- Release guard: 23 pre-existing violations unchanged by this work
+  (delta 0); new tests lock tbot public-pass + originals-blocked;
+  MR JOS rules untouched. Regress NO DIFFERENCE.
+
+## Release cleanup: untrack private/generated, allowlist, history audit
+
+- Untracked (files stay on disk): gt/* (3), generated_robots 5D
+  outputs (10: .blend/.glb/robot*.ldr/modules), stage3error.blend
+  (MR JOS-era links snapshot, zero code references, no replacement
+  needed). .gitignore extended. No commits (user reviews first).
+- Provenance: modules M_* = 5D-generator synthetic (header + generic
+  parts + build-code inputs, keep); fixtures = hand-made (keep);
+  stage3error = MR JOS-era (remove, done).
+- src/release/allowlist.txt added (exact path + rationale); all three
+  scanners honor it. New mechanism tests. MR JOS rules unchanged.
+- History audit (read-only, no rewrite): gt/ in stage3/stage4; .ldr =
+  fixtures/modules/generated only; .blend/.glb = generated + stage3
+  error file (all now untracked); *.io never; assets/private + runs
+  never; *.local.* = example templates only.
+- Checks: release PASS (0 violations), pytest file green, regress
+  NO DIFFERENCE.

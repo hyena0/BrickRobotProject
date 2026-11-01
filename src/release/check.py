@@ -9,6 +9,14 @@ ship, or when code pulls external URLs / embeds API keys:
 2. external URL loads in code (CDN hosts, http src/href)
 3. API-key-like patterns in tracked text files
 
+T-Bot exception (designer permission, PERMISSION.md): rendered
+images under assets/public_models/tbot/ pass. Originals and meshes
+(.io/.ldr/.mpd/.glb/...) stay blocked by suffix in ANY directory,
+including public ones. MR JOS blocking rules are unchanged.
+
+src/release/allowlist.txt excuses exact tracked paths with a written
+rationale (hand-made test inputs, guard self-matches).
+
 Usage: python -m src.release.check [--root PATH]
 Exit 0 = pass, 1 = violations found.
 """
@@ -66,13 +74,36 @@ def tracked_files(root: pathlib.Path) -> list[str]:
     return out.stdout.splitlines()
 
 
+def load_allowlist(root: pathlib.Path) -> frozenset:
+    """Exact tracked paths excused from private_hits, with rationale.
+
+    Reads src/release/allowlist.txt ("<path> # <reason>" per line).
+    Missing file means empty (old checkouts keep working).
+    """
+    try:
+        text = (root / "src" / "release" / "allowlist.txt").read_text(
+            encoding="utf-8")
+    except OSError:
+        return frozenset()
+    out = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        out.add(line.split(" # ", 1)[0].strip())
+    return frozenset(out)
+
+
 def private_hits(paths: list[str],
-                 dirs: tuple | None = None) -> list[str]:
+                 dirs: tuple | None = None,
+                 allow: frozenset = frozenset()) -> list[str]:
     if dirs is None:
         dirs = _private_dirs()
     hits = []
     name_suffix = (".local.yaml", ".local.json")
     for p in paths:
+        if p in allow:
+            continue
         low = p.lower()
         if (p.startswith(dirs)
                 or low.endswith(name_suffix)
@@ -82,9 +113,12 @@ def private_hits(paths: list[str],
 
 
 def url_hits(root: pathlib.Path,
-             paths: list[str]) -> list[str]:
+             paths: list[str],
+             allow: frozenset = frozenset()) -> list[str]:
     hits = []
     for p in paths:
+        if p in allow:
+            continue
         if not p.startswith(("src/", "scripts/")):
             continue
         if not p.lower().endswith((".py", ".js", ".html")):
@@ -102,9 +136,12 @@ def url_hits(root: pathlib.Path,
 
 
 def key_hits(root: pathlib.Path,
-             paths: list[str]) -> list[str]:
+             paths: list[str],
+             allow: frozenset = frozenset()) -> list[str]:
     hits = []
     for p in paths:
+        if p in allow:
+            continue
         if not p.lower().endswith(TEXT_SUFFIXES):
             continue
         try:
@@ -121,12 +158,16 @@ def key_hits(root: pathlib.Path,
     return hits
 
 
-def check(root: pathlib.Path) -> list[str]:
+def check(root: pathlib.Path, allow: frozenset | None = None) -> list[str]:
     paths = tracked_files(root)
+    if allow is None:
+        allow = load_allowlist(root)
     problems = []
-    problems += [f"private: {p}" for p in private_hits(paths)]
-    problems += [f"external-url: {p}" for p in url_hits(root, paths)]
-    problems += [f"api-key?: {p}" for p in key_hits(root, paths)]
+    problems += [f"private: {p}" for p in private_hits(paths, allow=allow)]
+    problems += [f"external-url: {p}" for p in url_hits(root, paths,
+                                                        allow=allow)]
+    problems += [f"api-key?: {p}" for p in key_hits(root, paths,
+                                                    allow=allow)]
     return problems
 
 

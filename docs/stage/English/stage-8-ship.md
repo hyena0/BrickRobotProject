@@ -34,6 +34,7 @@ Keep one full day for this stage regardless of progress.
 | 2:40–3:00 | Roadmap: vision-only, error compensation, mobile VLA, education kit | Slides |
 
 - Show only what was built during the hackathon.
+- MR JOS robot appears sharply (no blur) in the video with designer credit; no image, render, mesh, or model file of it is committed to the repo or README (permission scope in `assets/public_models/mrjos/PERMISSION.md`).
 - Subtitles in English.
 - Upload unlisted, check the link in a private window.
 

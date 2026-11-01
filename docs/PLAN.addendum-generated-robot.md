@@ -77,14 +77,14 @@ Tight; every gate is a real cut point. Fallback order if time runs out: (1) skip
 | Part | Robot | Shown | Visibility |
 |---|---|---|---|
 | Inference | MR JOS-based (private) | Abstract results only: primitives, joint axes, coupling explanation, metrics | Abstract |
-| Physical (first demo) | MR JOS-based | Homing, targets, sensor stop | **Robot blurred** (tracked mask, every frame) |
+| Physical (first demo) | MR JOS-based | Homing, targets, sensor stop | **Sharp in video, never in repo** (permission Nov 1 2026, `assets/public_models/mrjos/PERMISSION.md`) |
 | Generation | Generated robot | Spec → design agent → assembly → round trip | Fully shown |
 | Physical build | Generated robot | Built robot next to its render | Fully shown |
 | Control + VLA | Generated robot | Console with real meshes; generated control logic; VLA pointing in sim, then on the real robot | Fully shown |
 | Roadmap | – | Mobile hub, education kit, more module types | – |
 
-- Console overlays for the MR JOS robot use primitives only in published footage; private mesh mode is not shown.
-- If the designer later grants permission: remove the blur and add credit; nothing else changes.
+- Outside the demo video, console overlays for the MR JOS robot use primitives only; private mesh mode is not shown.
+- Designer permission granted Nov 1 2026 (recorded in `assets/public_models/mrjos/PERMISSION.md`): the physical robot and rebuilt-model renders (including mesh views, console captures, motion figures) appear sharply in the demo video with credit. Image/render/mesh files are never committed to the repo or README; nothing else changes.
 
 ## 7. 5C GUI reduction (frees ~0.5–1 day)
 

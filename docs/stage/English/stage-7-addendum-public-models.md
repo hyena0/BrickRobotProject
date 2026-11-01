@@ -24,11 +24,14 @@
 
 **1. Licence and publication**
 
-Rebrickable MOCs are copyrighted by their designers; "free download" is not an open licence. Until this model's terms are confirmed, apply **the same rules as MR JOS**:
+Rebrickable MOCs are copyrighted by their designers; "free download" is not an open licence. The designer (glaysche) granted permission on Nov. 1, 2026 — recorded in `assets/public_models/tbot/PERMISSION.md` with the original text. MR JOS rules still apply to everything else.
 
-- `.io`, converted LDraw, meshes and renders stay private (`assets/private/`, git-ignored). No Modal uploads.
-- Public material (README, video) shows **abstract results only**: primitives, joint axes, ratio tables, metrics, with attribution (designer, MOC number).
-- Renders can be published if the designer gives permission. A human asks for it.
+- Permitted by the designer: renders of the rebuilt model (as AI input and in the 3-minute demo video) and showing the physical robot in the video.
+- NOT permitted (not in the original): README images, console screenshots containing meshes, and redistribution of original files (`.io`, exported `.ldr`/`.mpd`, per-link mesh files) — these stay under `assets/private/` (git-ignored). No Modal uploads.
+- Published renders live under `assets/public_models/tbot/renders/`. Motion-figure plots, console captures, originals and meshes stay private.
+- Analysis tables and joint/gear numerics are our own measurements and stay public (owner decision, not designer permission).
+
+Attribution (no trademark notice in it): T-Bot by glaysche (MOC-85202), used with permission — https://rebrickable.com/mocs/MOC-85202/glaysche/gantry-robot-t-bot-3-degrees-of-freedom/
 
 **2. Linear joint support**
 
