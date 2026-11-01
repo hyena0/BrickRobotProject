@@ -4,8 +4,9 @@ Covers all 3 pages (main / calibration / verify) on fake bricks:
 fails on any browser console error, checks the scene graph via
 window._scene, drives one mat point through IK, checks the
 preview -> blocked -> home -> send -> actual-refresh flow on the
-main page, and saves screenshots. Prints a PASS/FAIL table;
-exit code 0 only when all rows pass.
+main page, and saves screenshots. The tbot phase selects T-Bot,
+drives a reachable target through IK, and checks TCP<=5mm.
+Prints a PASS/FAIL table; exit code 0 only when all rows pass.
 """
 
 import argparse
@@ -262,11 +263,51 @@ def run_virtual(page, base, args, rows):
     page.screenshot(path=f"{args.out}/shot-follow.png")
 
 
+def run_tbot(page, base, args, rows):
+    """T-Bot virtual-only: select robot, reachable target, TCP<=5mm."""
+    page.goto(base + "/")
+    page.wait_for_function("() => !!window._scene", timeout=60000)
+    page.wait_for_function(
+        "() => document.querySelectorAll("
+        "'#robot option').length > 1",
+        timeout=60000)
+    page.select_option("#robot", "tbot")
+    # select posts /api/robot/select, then the page reloads;
+    # the banner text only appears after the reload.
+    page.wait_for_function(
+        "() => (document.getElementById('mode') "
+        ".textContent || '').includes('T-Bot')",
+        timeout=60000)
+    page.wait_for_function("() => !!window._scene", timeout=60000)
+    page.wait_for_function(
+        "() => (document.getElementById('joints') "
+        ".textContent || '').includes('P1')",
+        timeout=60000)
+    mode = page.text_content("#mode") or ""
+    rows.append(("tbot: mode banner virtual T-Bot",
+                 "T-Bot" in mode and "가상만" in mode,
+                 mode.strip()[:60]))
+    send_visible = page.is_visible("#send-row")
+    rows.append(("tbot: send row hidden (virtual-only)",
+                 not send_visible, f"visible={send_visible}"))
+    joints_txt = page.text_content("#joints") or ""
+    rows.append(("tbot: joint panel P1/P2/P3",
+                 all(k in joints_txt for k in ("P1", "P2", "P3")),
+                 joints_txt.strip()[:100]))
+    page.click("#ik-reach")
+    live, prev, det = wait_solve(page)
+    det = (f"live={live} preview={prev}" +
+           (f" {det}" if det else ""))
+    rows.append(("tbot: reachable target, body follows, live<=5mm",
+                 live is not None and live <= 5.0, det))
+    page.screenshot(path=f"{args.out}/shot-tbot.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--out", default="runs/ui_smoke")
-    ap.add_argument("--phase", choices=["connected", "virtual"],
+    ap.add_argument("--phase", choices=["connected", "virtual", "tbot"],
                     default="connected")
     args = ap.parse_args()
 
@@ -287,6 +328,8 @@ def main():
             base = f"http://127.0.0.1:{args.port}"
             if args.phase == "connected":
                 run_connected(page, base, args, rows)
+            elif args.phase == "tbot":
+                run_tbot(page, base, args, rows)
             else:
                 run_virtual(page, base, args, rows)
             browser.close()

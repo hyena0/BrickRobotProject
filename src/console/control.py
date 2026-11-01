@@ -54,6 +54,78 @@ from src.console import mini
 CONTROL_PORT = 8766
 MAX_UNCONFIRMED_JOG_DEG = 5.0
 
+# Console robot selection (additive; default MR JOS behavior unchanged).
+ROBOT_IDS = ("mrjos", "tbot")
+
+
+def robot_files(robot):
+    """Model + package paths per console robot.
+
+    mrjos: committed pipeline outputs. tbot: private stage-7
+    analysis (git-ignored runs/); never uploaded anywhere.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    if robot == "tbot":
+        return (root / "runs" / "stage7_tbot_t2" / "tbot_model.json",
+                root / "runs" / "stage7_tbot_t2" / "tbot_package.json")
+    if robot == "mrjos":
+        return (root / "models" / "robot_inferred.json",
+                root / "packages" / "robot_inferred"
+                / "robot_package.json")
+    raise ValueError("unknown robot: " + str(robot))
+
+
+def tbot_jog_map():
+    """Display-only joint map for virtual-only T-Bot (no brick link).
+
+    brick/port "-" means no encoder source; ratio is mm per motor
+    degree where measured (P1 shaft-direct) else None (drive unknown).
+    """
+    return {
+        "P1": {"motor_uid": "A", "brick": "-", "port": "-",
+               "ratio": 153.6 / 360.0},
+        "P2": {"motor_uid": "B", "brick": "-", "port": "-",
+               "ratio": None},
+        "P3": {"motor_uid": "C", "brick": "-", "port": "-",
+               "ratio": None},
+    }
+
+
+def select_robot(handler, robot):
+    """Swap the live model + joint map (shared class state, in place).
+
+    T-Bot stays virtual-only: callers must refuse brick motion via
+    TBOT_BLOCKED while handler.robot == "tbot".
+    """
+    if robot not in ROBOT_IDS:
+        raise ValueError("unknown robot: " + str(robot))
+    from src.kin.model import load_model
+
+    model_path, _ = robot_files(robot)
+    cls = type(handler)
+    cls.robot = robot
+    cls.model_doc = load_model(str(model_path))
+    fresh = (dict(tbot_jog_map()) if robot == "tbot"
+             else mini.load_jog_map(
+                 overrides=mini.read_jog_overrides(
+                     handler.override_path)))
+    handler.jog_map.clear()
+    handler.jog_map.update(fresh)
+    return {"ok": True, "robot": robot}
+
+
+# Motion/sensor APIs refused while T-Bot is selected: T-Bot is
+# virtual-only, real brick connection stays blocked.
+TBOT_BLOCKED = frozenset({
+    "/api/jog", "/api/jogmap/set", "/api/jogmap/reset",
+    "/api/jogmap/delete", "/api/markzero", "/api/home", "/api/diag",
+    "/api/goto", "/api/preview", "/api/home_joint", "/api/direction",
+    "/api/pose", "/api/range",
+    "/api/calib/park", "/api/calib/restore", "/api/calib/check",
+    "/api/calib/confirm", "/api/calib/flow",
+    "/api/twin/run", "/api/twin/rest",
+})
+
 STATIC_DIR = pathlib.Path(__file__).resolve().parent / "control_static"
 
 
@@ -130,8 +202,20 @@ def joint_overview(handler):
     offsets = record.get("offsets", {}) or {}
     homed = {res["joint"]: res.get("status") == "homed"
              for res in record.get("results", [])}
-    readback = mini.coupled_joint_readback(encoders, handler.jog_map,
-                                                  offsets)
+    try:
+        readback = mini.coupled_joint_readback(encoders,
+                                               handler.jog_map,
+                                               offsets)
+    except KeyError:
+        # Non-6R maps (no wrist coupling): independent readback,
+        # joint = ratio * motor + offset; missing encoders stay None.
+        readback = {}
+        for joint_id, entry in handler.jog_map.items():
+            motor = encoders.get((entry["brick"], entry["port"]))
+            ratio = entry.get("ratio")
+            readback[joint_id] = (
+                ratio * motor + float(offsets.get(joint_id, 0.0) or 0.0)
+                if motor is not None and ratio is not None else None)
     joints = []
     for joint_id, entry in handler.jog_map.items():
         motor = encoders.get((entry["brick"], entry["port"]))
@@ -161,9 +245,12 @@ def model_payload(handler):
 
     doc = handler.model_doc
     arr = joint_arrays(doc)
+    kinds = arr.get("kinds", ["revolute"] * len(arr["points"]))
     joints = [{"id": j["id"], "axis": list(j["axis"]),
-               "point": list(p)}
-              for j, p in zip(chain_order(doc), arr["points"])]
+               "point": list(p), "kind": k,
+               "unit": ("mm" if k == "prismatic" else "deg")}
+              for j, p, k in zip(chain_order(doc), arr["points"],
+                                 kinds)]
     try:
         root = pathlib.Path(__file__).resolve().parents[2]
         package = json.loads((root / "packages" / "robot_inferred"
@@ -183,11 +270,16 @@ def model_payload(handler):
     except (OSError, ValueError, KeyError, IndexError):
         envelopes = []
     frame = doc.get("frame", "") if isinstance(doc, dict) else ""
-    tip = tip_offset()
-    jp = arr["points"][5]
+    if all(k == "prismatic" for k in kinds):
+        tip = list(ee_point(doc))
+    else:
+        tip = tip_offset()
+    jp = arr["points"][-1]
     import math as _m
     _d = [tip[i] - jp[i] for i in range(3)]
-    _n = _m.sqrt(sum(v * v for v in _d)) or 1.0
+    _n = _m.sqrt(sum(v * v for v in _d))
+    if _n < 1e-9:
+        _d, _n = [0.0, 0.0, -1.0], 1.0
     return {"ok": True, "joints": joints,
             "ee_mm": list(ee_point(doc)), "envelopes": envelopes,
             "units": "mm,deg", "frame": frame,
@@ -230,11 +322,14 @@ def tunables(handler):
     return out
 
 
-def package_doc():
+def package_doc(handler=None):
     root = pathlib.Path(__file__).resolve().parents[2]
-    return json.loads((root / "packages" / "robot_inferred"
-                       / "robot_package.json").read_text(
-                           encoding="utf-8"))
+    if handler is not None and getattr(handler, "robot", "mrjos") == "tbot":
+        _, path = robot_files("tbot")
+    else:
+        path = (root / "packages" / "robot_inferred"
+                / "robot_package.json")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 STAGE_DEFAULT = {"table_z_mm": -220.8, "center_x_mm": 34.0,
@@ -288,7 +383,14 @@ def tip_offset():
 
 
 def tip_doc(doc):
-    """Doc copy whose TCP is the gripper tip (solver/display only)."""
+    """Doc copy whose TCP is the gripper tip (solver/display only).
+
+    Docs without any revolute joint (pure-prismatic gantries) have
+    no wrist: the model end effector already is the tool point.
+    """
+    joints = doc.get("joints", []) if isinstance(doc, dict) else []
+    if joints and all(j.get("type") == "prismatic" for j in joints):
+        return dict(doc)
     tip = tip_offset()
     out = dict(doc)
     out["end_effector"] = {"link": "D6", "point_mm": tip}
@@ -368,8 +470,9 @@ def read_json(path, default):
 
 def ranges_payload(handler):
     """5A sim ranges + saved measured endpoints + adopted ranges."""
-    pkg = package_doc()
-    sim = {j["id"]: list(j["limits_deg"]) for j in pkg.get("joints", [])}
+    pkg = package_doc(handler)
+    sim = {j["id"]: list(j.get("limits_mm", j.get("limits_deg")))
+           for j in pkg.get("joints", [])}
     src = {j["id"]: j.get("limit_source", {}) for j in pkg.get("joints", [])}
     stored = read_json(runs_day_dir() / "ranges.json", {})
     measured = stored.get("measured", {}) or {}
@@ -397,7 +500,8 @@ def ranges_payload(handler):
             "adopted_source": ("measured" if lo_m is not None
                                and hi_m is not None else "sim"),
         })
-    pkg_margin = pkg.get("operating_margin_deg")
+    pkg_margin = pkg.get("operating_margin_deg",
+                         pkg.get("operating_margin_mm"))
     return {"ok": True, "joints": joints,
             "package_margin_deg": pkg_margin,
             "margin_deg": margin}
@@ -463,7 +567,7 @@ def solve_ik(handler, pos, mat, q_init, position_only):
     ids = joint_arrays(doc)["ids"]
     adopted = {r["joint"]: r["adopted"]
                for r in ranges_payload(handler)["joints"]}
-    pkg = package_doc()
+    pkg = package_doc(handler)
     if not isinstance(pos, (list, tuple)) or len(pos) != 3:
         raise ValueError("pos must be [x, y, z] in mm")
     if mat is not None:
@@ -476,7 +580,8 @@ def solve_ik(handler, pos, mat, q_init, position_only):
     order = [j["id"] for j in pkg.get("joints", [])]
     starts = []
     for pose in pkg.get("safe_poses", []) or []:
-        qd = dict(zip(order, pose.get("q_deg", [])))
+        qd = dict(zip(order,
+                      pose.get("q_deg", []) or pose.get("q", [])))
         if all(j in qd for j in ids):
             starts.append([float(qd[j]) for j in ids])
     prev = getattr(handler, "last_ik", None)
@@ -509,6 +614,7 @@ def solve_ik(handler, pos, mat, q_init, position_only):
              position_only=bool(position_only),
              limits_doc={
                  "limits_deg": {j: adopted.get(j) for j in ids},
+                 "limits_mm": {j: adopted.get(j) for j in ids},
                  "coupled_limits":
                      pkg.get("coupled_limits", []) or []},
              extra_starts=starts)
@@ -536,7 +642,7 @@ def reachable_target(handler, seed=None):
     ids = joint_arrays(doc)["ids"]
     adopted = {r["joint"]: r["adopted"]
                for r in ranges_payload(handler)["joints"]}
-    pkg = package_doc()
+    pkg = package_doc(handler)
     coupled = pkg.get("coupled_limits", []) or []
     rng = random.Random(seed)
     for _ in range(2000):
@@ -799,7 +905,7 @@ def _calibration_flow(handler):
 
 
 def reproduce_pose(handler, pose_id):
-    pkg = package_doc()
+    pkg = package_doc(handler)
     poses = {p["id"]: p for p in pkg.get("safe_poses", [])}
     if pose_id not in poses:
         raise KeyError("unknown pose: " + str(pose_id))
@@ -912,6 +1018,16 @@ class _Handler(mini._Handler):
         self.wfile.write(body)
 
     def _dispatch(self, path, args):
+        if path == "/api/robot":
+            return {"ok": True, "robot": getattr(self, "robot",
+                                                 "mrjos"),
+                    "robots": list(ROBOT_IDS)}
+        if path == "/api/robot/select":
+            return select_robot(self, args.get("robot"))
+        if path in TBOT_BLOCKED and getattr(self, "robot",
+                                            "mrjos") == "tbot":
+            raise ValueError("tbot is virtual-only: real brick "
+                             "motion stays blocked (" + path + ")")
         if path == "/api/overview":
             return joint_overview(self)
         if path == "/api/model":
@@ -960,7 +1076,7 @@ class _Handler(mini._Handler):
                     args["delta"] = delta
             return super()._dispatch(path, args)
         if path == "/api/config":
-            pkg = package_doc()
+            pkg = package_doc(self)
             return {"ok": True, "tunables": tunables(self),
                     "defaults": TUNABLE_DEFAULTS,
                     "package": {
@@ -987,7 +1103,7 @@ class _Handler(mini._Handler):
             return record_range(self, args["joint"], args["end"],
                                 args["joint_deg"])
         if path == "/api/poses":
-            pkg = package_doc()
+            pkg = package_doc(self)
             stored = read_json(runs_day_dir() / "report.json", {})
             last = {}
             for run in stored.get("poses", []) or []:
@@ -1005,6 +1121,8 @@ class _Handler(mini._Handler):
         if path == "/api/reachable_target":
             return reachable_target(self, args.get("seed"))
         if path == "/api/table":
+            if getattr(self, "robot", "mrjos") == "tbot":
+                return {"ok": True, "stage": package_doc(self)["stage"]}
             return {"ok": True, "stage": stage_table()}
         if path == "/api/mode":
             # virtual: fake bricks (send allowed for demo).
@@ -1017,6 +1135,10 @@ class _Handler(mini._Handler):
                 except Exception:
                     bricks[brick] = False
             connected = bool(bricks) and all(bricks.values())
+            if getattr(self, "robot", "mrjos") == "tbot":
+                # Virtual-only: never report brick connection.
+                return {"ok": True, "robot": "tbot", "virtual": True,
+                        "connected": False, "bricks": {}}
             return {"ok": True,
                     "virtual": bool(getattr(self, "virtual", False)),
                     "connected": connected, "bricks": bricks}
@@ -1253,7 +1375,10 @@ class _Handler(mini._Handler):
             available = ["primitives"]
             links = {}
             if self.private_visuals:
-                for i in range(7):
+                from src.kin.model import chain_order
+
+                n = len(chain_order(self.model_doc)) + 1
+                for i in range(n):
                     lid = "D" + str(i)
                     links[lid] = ("/private/visual/"
                                    + self.private_visuals + "/"
@@ -1294,21 +1419,28 @@ def create_server(transport, host="127.0.0.1", port=CONTROL_PORT,
                   jog_map=None, override_path=None,
                   direction_path=None, model_doc=None,
                   console_path=None, private_visuals=None,
-                  virtual=False):
+                  virtual=False, robot="mrjos"):
     """Create (not start) the control console server.
 
     Always binds a loopback host; only 127.0.0.1 is supported.
     virtual=True means fake bricks (send flow allowed for demo).
+    robot selects the model + package ("mrjos" default, "tbot"
+    virtual-only from private stage-7 analysis).
     """
     if host != "127.0.0.1":
         raise ValueError("control console serves 127.0.0.1 only")
+    if robot not in ROBOT_IDS:
+        raise ValueError("unknown robot: " + str(robot))
     if override_path is None:
         override_path = mini.default_override_path()
     if direction_path is None:
         direction_path = default_direction_path()
     if console_path is None:
         console_path = default_console_path()
-    if jog_map is None:
+    if jog_map is None and robot == "tbot":
+        jog_map = tbot_jog_map()
+        overrides = {}
+    elif jog_map is None:
         overrides = mini.read_jog_overrides(override_path)
         jog_map = mini.load_jog_map(overrides=overrides)
     else:
@@ -1316,14 +1448,15 @@ def create_server(transport, host="127.0.0.1", port=CONTROL_PORT,
     if model_doc is None:
         from src.kin.model import load_model
 
-        root = pathlib.Path(__file__).resolve().parents[2]
-        model_doc = load_model(str(root / "models" / "robot_inferred.json"))
+        model_path, _ = robot_files(robot)
+        model_doc = load_model(str(model_path))
     handler = type("ControlHandler", (_Handler,),
                    {"transport": transport, "jog_map": jog_map,
                     "jog_overrides": overrides,
                     "override_path": str(override_path),
                     "direction_path": str(direction_path),
                     "model_doc": model_doc,
+                    "robot": robot,
                     "zeros": {},
                     "console_path": str(console_path),
                     "private_visuals": private_visuals,
@@ -1384,11 +1517,15 @@ def main(argv=None) -> None:
     parser.add_argument("--offline", action="store_true",
                         help="virtual-only: no bricks answer "
                              "(body follows IK, send hidden)")
+    parser.add_argument("--robot", default="mrjos",
+                        choices=list(ROBOT_IDS),
+                        help="console robot (tbot is virtual-only)")
     args = parser.parse_args(argv)
     transport = build_transport(args.config, offline=args.offline)
     server = create_server(transport, port=args.port,
                            private_visuals=args.private_visuals,
-                           virtual=args.offline or args.config is None)
+                           virtual=args.offline or args.config is None,
+                           robot=args.robot)
     print("control console on http://127.0.0.1:" + str(args.port)
           + " (Ctrl-C to stop)")
     try:
@@ -1456,6 +1593,7 @@ body[data-page="main"] #view3d { position: absolute; inset: 0;
   <span id="st-left">좌: …</span><span id="st-right">우: …</span>
   <span id="st-latch">래치: …</span><span id="st-hb">하트비트: …</span>
   <span id="homedots">호밍: …</span>
+  <label>로봇 <select id="robot"><option>로딩…</option></select></label>
   <a id="cal-link" href="/calibration"
      style="display:none">보정 페이지에서 호밍하세요</a>
   <button id="estop">E-STOP</button>
@@ -1626,7 +1764,32 @@ const qdeg = {};
 // Send flow: pendingQ = last IK result awaiting send; previewOk =
 // preview drawn + /api/preview range ok. lastOv = latest overview.
 let pendingQ = null, previewOk = false, previewRange = "";
-let lastOv = null, VIRT = false;
+let lastOv = null, VIRT = false, ROBOT = "mrjos";
+async function initRobot() {
+  const sel = document.getElementById("robot");
+  if (!sel) return;
+  try {
+    const r = await post("/api/robot", {});
+    if (!r.ok) return;
+    ROBOT = r.robot;
+    sel.innerHTML = "";
+    for (const id of r.robots) {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = id === "tbot" ? "T-Bot (가상)" : "MR JOS";
+      if (id === r.robot) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = async () => {
+      const rr = await post("/api/robot/select", {robot: sel.value});
+      if (rr.ok) location.reload();
+      else {
+        alert("로봇 전환 실패: " + (rr.error || "?"));
+        sel.value = ROBOT;
+      }
+    };
+  } catch (err) { /* keep default selection */ }
+}
 const PAGE_ID = (document.body.dataset &&
   document.body.dataset.page) || "main";
 const SEGS = [], NODES = []; // limb capsules, joint spheres
@@ -1678,13 +1841,16 @@ async function initModel() {
   // two smallest box sides (tapered limbs, like the real build).
   // Capped so the huge base envelopes do not become giant balls.
   const RADII = [];
-  for (let k = 1; k <= 6; k++) {
-    const env = m.envelopes.find((e) => e.link === "D" + k);
-    const s = env ? [...env.size_mm].sort((a, b) => a - b)
-                  : [40, 40, 40];
-    RADII.push(Math.min(0.28 * Math.sqrt(s[0] * s[1]), 40));
+  for (const env of m.envelopes) {
+    if (!env.carrier) continue;
+    const s = [...env.size_mm].sort((a, b) => a - b);
+    RADII.push({joint: env.carrier,
+      r: Math.min(0.28 * Math.sqrt(s[0] * s[1]), 40)});
   }
-  const segRadius = (i) => (i < 6 ? RADII[i] : RADII[5] * 0.7);
+  const segRadius = (i) => {
+    const f = RADII.find((e) => e.joint === m.joints[i].id);
+    return f ? f.r : Math.min(0.28 * 40, 40);
+  };
   const limbMats = [0x9fb3c8, 0x7e97b5].map((c) =>
     new THREE.MeshStandardMaterial({color: c, roughness: 0.5,
       metalness: 0.35}));
@@ -1698,10 +1864,10 @@ async function initModel() {
   // capsule endpoints (joint anchors at the zero pose) are constant
   // in that frame and the mesh just takes F_i each tick. The anchor
   // p_i lies on screw axis i, hence F_i^-1 F_{i-1} p_i == p_i.
-  const q0 = m.joints.map((j) => (POSE01[j.id] || 0) * Math.PI / 180);
+  const q0 = m.joints.map((j) => qNative(j.id, POSE01[j.id] || 0));
   const F0pose = fkine(q0);
   const e0 = MODEL.ee_mm;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < m.joints.length; i++) {
     const a = m.joints[i].point;
     const b = (i < 5) ? m.joints[i + 1].point : e0;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
@@ -1723,8 +1889,8 @@ async function initModel() {
   // Gizmo starts at the gripper-tip TCP, not the wrist.
   const tip0 = MODEL.tip_mm;
   const p0ee = new THREE.Vector3(tip0[0], tip0[1], tip0[2])
-    .applyMatrix4(F0pose[5]);
-  for (let i = 0; i < 6; i++) {
+    .applyMatrix4(F0pose[F0pose.length - 1]);
+  for (let i = 0; i < m.joints.length; i++) {
     const r = segRadius(i) + 6;
     const ball = new THREE.Mesh(
       new THREE.SphereGeometry(r, 16, 12), jointMat);
@@ -1853,7 +2019,8 @@ async function initModel() {
   const actualLine = skelLine(0xff44ff, 0.9);
   function setSkel(line, pts) {
     const a = line.geometry.attributes.position;
-    for (let i = 0; i < 8; i++) a.setXYZ(i, pts[i].x, pts[i].y, pts[i].z);
+    for (let i = 0; i < 8 && i < pts.length; i++)
+      a.setXYZ(i, pts[i].x, pts[i].y, pts[i].z);
     a.needsUpdate = true;
     line.visible = true;
   }
@@ -2072,7 +2239,7 @@ bindVis("vm-dir", (v) => {
   const st = window._scene; if (st) st.dirLine.visible = v;
 });
 function skelNodes(F) {
-  // Skeleton nodes: base origin, 6 joint-frame origins, EE point.
+  // Skeleton nodes: base origin, joint-frame origins, EE point.
   const pts = [new THREE.Vector3(0, 0, 0)];
   for (const M of F) pts.push(new THREE.Vector3().setFromMatrixPosition(M));
   const e = MODEL.ee_mm;
@@ -2112,20 +2279,41 @@ function se3(w, v, th) {
     0, 0, 0, 1);
   return {R: Rm, t: new THREE.Vector3(t[0], t[1], t[2])};
 }
-function fkine(qrad) {
+function uOf(id) {
+  // Native display unit per joint (mm prismatic, deg revolute).
+  const js = (typeof MODEL !== "undefined" && MODEL && MODEL.joints) || [];
+  const j = js.find((k) => k.id === id);
+  return (j && j.unit) || "deg";
+}
+function qNative(id, v) {
+  // Client q is native units (mm prismatic, deg revolute);
+  // PoE needs radians for revolute, mm as-is for prismatic.
+  return uOf(id) === "mm" ? v : v * Math.PI / 180;
+}
+function qvec(q) {
+  return MODEL.joints.map((j) => qNative(j.id, q[j.id] || 0));
+}
+function fkine(q) {
   const js = MODEL.joints;
   let T = new THREE.Matrix4();
   const frames = [];
   for (let i = 0; i < js.length; i++) {
     // Axes arrive raw; Python joint_arrays() normalizes to unit.
     const w0 = js[i].axis, p = js[i].point;
-    const n = Math.hypot(w0[0], w0[1], w0[2]);
+    const n = Math.hypot(w0[0], w0[1], w0[2]) || 1;
     const w = [w0[0] / n, w0[1] / n, w0[2] / n];
-    const v = [-(w[1]*p[2] - w[2]*p[1]),
-               -(w[2]*p[0] - w[0]*p[2]),
-               -(w[0]*p[1] - w[1]*p[0])];
-    const {R, t} = se3(w, v, qrad[i]);
-    const M = new THREE.Matrix4().copy(R).setPosition(t);
+    let M;
+    if (js[i].kind === "prismatic") {
+      // Pure translation along the axis; q is already mm.
+      M = new THREE.Matrix4().makeTranslation(
+        w[0] * q[i], w[1] * q[i], w[2] * q[i]);
+    } else {
+      const v = [-(w[1]*p[2] - w[2]*p[1]),
+                 -(w[2]*p[0] - w[0]*p[2]),
+                 -(w[0]*p[1] - w[1]*p[0])];
+      const {R, t} = se3(w, v, q[i]);
+      M = new THREE.Matrix4().copy(R).setPosition(t);
+    }
     T = T.clone().multiply(M);
     frames.push(T.clone());
   }
@@ -2136,24 +2324,23 @@ function tick() {
   requestAnimationFrame(tick);
   const st = window._scene;
   const {renderer, scene, camera, controls, arm} = st;
-  const qrad = MODEL.joints.map((j) => (qdeg[j.id] || 0) * Math.PI / 180);
-  const F = fkine(qrad);
-  for (let i = 0; i < 6; i++) {
+  const F = fkine(qvec(qdeg));
+  for (let i = 0; i < MODEL.joints.length; i++) {
     SEGS[i].mesh.matrix.copy(F[i]).multiply(SEGS[i].local);
     SEGS[i].mesh.matrixWorldNeedsUpdate = true;
   }
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < MODEL.joints.length; i++) {
     const p = MODEL.joints[i].point;
     _v.set(p[0], p[1], p[2]).applyMatrix4(F[i]);
     NODES[i].matrix.makeTranslation(_v.x, _v.y, _v.z);
     NODES[i].matrixWorldNeedsUpdate = true;
   }
-  window._scene.eeAxes.matrix.copy(F[5]);
+  window._scene.eeAxes.matrix.copy(F[F.length - 1]);
   window._scene.eeAxes.matrixWorldNeedsUpdate = true;
   if (VSRC === "ldraw" && MESHES.ready) {
     MESHES.groups[0].matrix.identity();
     MESHES.groups[0].matrixWorldNeedsUpdate = true;
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= MODEL.joints.length; i++) {
       MESHES.groups[i].matrix.copy(F[i - 1]);
       MESHES.groups[i].matrixWorldNeedsUpdate = true;
     }
@@ -2161,15 +2348,16 @@ function tick() {
   // Ghost preview follows the pending IK solution (connected only).
   if (ghostOn && pendingQ) {
     try {
-      const gq = MODEL.joints.map((j) => (pendingQ[j.id] || 0) *
-        Math.PI / 180);
+      const gq = qvec(pendingQ);
       const Fg = fkine(gq);
-      for (let i = 0; i < 6 && i < GHOST.prims.length; i++) {
+      for (let i = 0; i < MODEL.joints.length &&
+           i < GHOST.prims.length; i++) {
         GHOST.prims[i].mesh.matrix.copy(Fg[i])
           .multiply(GHOST.prims[i].local);
         GHOST.prims[i].mesh.matrixWorldNeedsUpdate = true;
       }
-      for (let i = 0; i < 6 && i < GHOST.nodes.length; i++) {
+      for (let i = 0; i < MODEL.joints.length &&
+           i < GHOST.nodes.length; i++) {
         const p = MODEL.joints[i].point;
         _v.set(p[0], p[1], p[2]).applyMatrix4(Fg[i]);
         GHOST.nodes[i].mesh.matrix.makeTranslation(_v.x, _v.y, _v.z);
@@ -2180,7 +2368,8 @@ function tick() {
           GHOST.ldraw[0].matrix.identity();
           GHOST.ldraw[0].matrixWorldNeedsUpdate = true;
         }
-        for (let i = 1; i <= 6 && i < GHOST.ldraw.length; i++) {
+        for (let i = 1; i <= MODEL.joints.length &&
+             i < GHOST.ldraw.length; i++) {
           if (!GHOST.ldraw[i]) continue;
           GHOST.ldraw[i].matrix.copy(Fg[i - 1]);
           GHOST.ldraw[i].matrixWorldNeedsUpdate = true;
@@ -2256,7 +2445,10 @@ async function poll() {
     const latched = (L === true || R === true);
     el("st-latch", "래치: " + (latched ? "걸림" : "없음"),
        latched ? "bad" : "ok");
-    let html = "<table><tr><th>관절</th><th>관절각</th>" +
+    const allMm = ((MODEL && MODEL.joints) || []).length > 0 &&
+      MODEL.joints.every((k) => k.unit === "mm");
+    const uj = allMm ? "(mm)" : "(°)";
+    let html = "<table><tr><th>관절</th><th>관절각" + uj + "</th>" +
       "<th>모터각</th><th>홈</th><th>방향</th><th>센서</th>" +
       "<th>조그</th></tr>";
     const fEl = document.getElementById("follow-live");
@@ -2265,7 +2457,8 @@ async function poll() {
     for (const j of o.joints) {
       if (follow)
         qdeg[j.joint] = j.joint_deg === null ? 0 : j.joint_deg;
-      const jog = j.direction === "confirmed" ? "" : " (최대±5°)";
+      const jog = j.direction === "confirmed" ? ""
+        : (uOf(j.joint) === "mm" ? " (최대±5mm)" : " (최대±5°)");
       html += "<tr><td>" + j.joint + "</td><td>" +
         (j.joint_deg === null ? "?" : j.joint_deg.toFixed(1)) + "</td><td>" +
         (j.motor_deg === null ? "?" : j.motor_deg.toFixed(1)) + "</td><td>" +
@@ -2301,8 +2494,9 @@ async function poll() {
       const md = await post("/api/mode", {});
       if (md.ok) VIRT = !!md.virtual;
     } catch (err) { /* keep last VIRT */ }
-    el("mode", conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
-                    : "가상만(브릭 미연결)", conn ? "ok" : "bad");
+    el("mode", (conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
+                    : "가상만(브릭 미연결)") +
+      (ROBOT === "tbot" ? " T-Bot" : ""), conn ? "ok" : "bad");
     const dg = document.getElementById("diag");
     if (dg) {
       let dh = "<table><tr><th>관절</th><th>브릭/포트</th>" +
@@ -2378,10 +2572,11 @@ async function refreshRanges() {
     "<th>실측[lo,hi]</th><th>채택</th><th>기록</th></tr>";
   for (const j of r.joints) {
     const cur = (qdeg[j.joint] || 0).toFixed(1);
+    const uu = uOf(j.joint) === "mm" ? "mm" : "°";
     html += "<tr><td>" + j.joint + "</td><td>" + rng(j.sim) +
       "</td><td>" + rng(j.measured) + "</td><td>" + rng(j.adopted) +
       (j.adopted_source === "measured" ? "(실측)" : "(시뮬)") +
-      "</td><td>현재 " + cur + "° " +
+      "</td><td>현재 " + cur + uu + " " +
       "<button data-j='" + j.joint + "' data-e='lo'>lo로</button>" +
       "<button data-j='" + j.joint + "' data-e='hi'>hi로</button>" +
       "</td></tr>";
@@ -2441,9 +2636,7 @@ function tipOf(F) {
     .applyMatrix4(F[F.length - 1]);
 }
 function currentTCPModel() {
-  const qrad = MODEL.joints.map((j) => (qdeg[j.id] || 0) *
-    Math.PI / 180);
-  return tipOf(fkine(qrad));
+  return tipOf(fkine(qvec(qdeg)));
 }
 // Minimal rotation taking the D6-frame gripper dir to -z.
 function gripperDownMat() {
@@ -2483,8 +2676,7 @@ async function solveIK(seedQ) {
   st.targetArm = pm.clone();
   st.prevQ = {...qdeg};
   try {
-    const pq = MODEL.joints.map((j) => (st.prevQ[j.id] || 0) *
-      Math.PI / 180);
+    const pq = qvec(st.prevQ);
     st.setSkel(st.prevLine, skelNodes(fkine(pq)));
     st.prevLine.visible =
       document.getElementById("vm-prev").checked;
@@ -2544,7 +2736,7 @@ async function solveIK(seedQ) {
   // translucent ghost model; the line preview is gone.
   const sol = {};
   r.joints.forEach((jid, i) => { sol[jid] = r.ik.q_deg[i]; });
-  const solRad = MODEL.joints.map((j) => sol[j.id] * Math.PI / 180);
+  const solRad = qvec(sol);
   const conn = isConnected();
   if (!conn) {
     for (const j of MODEL.joints) qdeg[j.id] = sol[j.id];
@@ -2644,6 +2836,8 @@ const SEND_SPEED_DPS = 15.0;
 // Connected = bricks answer reads recently. Stale or null reads
 // mean virtual-only: the body follows IK itself, send stays hidden.
 function isConnected() {
+  // T-Bot is virtual-only: never connected, body follows IK.
+  if (typeof ROBOT !== "undefined" && ROBOT === "tbot") return false;
   return !!(lastOv && (Date.now() - lastOk < 6000) &&
     lastOv.latched.left !== null && lastOv.latched.right !== null);
 }
@@ -3197,6 +3391,7 @@ const __realById = document.getElementById.bind(document);
 document.getElementById = (id) =>
   __realById(id) || document.createElement("div");
 initModel().then(() => {
+  initRobot();
   // Show only this page's sections (log section has no data-sec
   // and stays visible everywhere).
   document.querySelectorAll("[data-sec]").forEach((s) => {
