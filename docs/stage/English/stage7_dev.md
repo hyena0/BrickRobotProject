@@ -301,3 +301,36 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   automatable as-is). Spark selection loop itself is cheap (order $0.1,
   1–3 calls) once those inputs exist.
 - Guardrails unchanged (additive only; 24121 must not reclassify; regress green).
+
+## Finishing-4 console T-Bot (additive, MR JOS paths unchanged)
+
+- Package: runs/stage7_tbot_t2/tbot_package.json (private, git-ignored):
+  D0..D3 coarse envelopes (bbox+15mm pad; D3 temp box at rack origin),
+  limits_mm (P1 ±120, P2 ±80, P3 ±47.2), safe home q, drives (P1 153.6
+  mm/rev provisional; P2/P3 null), stage (no table: floor below lowest
+  part; reach 200 covers limits box).
+- Server (src/console/control.py, additive): --robot mrjos|tbot (default
+  mrjos); /api/robot + /api/robot/select (in-place model+jogmap swap);
+  package_doc(handler=None) — all prior callers unchanged; tip_doc
+  all-prismatic bypass (kind-based, no model names); model_payload
+  kind/unit per joint + last-point gripper ref; solve_ik passes limits_mm
+  alongside limits_deg + safe-pose "q" fallback; ranges accepts limits_mm/
+  operating_margin_mm; overview coupled-readback KeyError fallback to
+  independent readback; /api/mode forces virtual+disconnected for tbot;
+  /api/table serves package stage; /api/visual link count from chain.
+  TBOT_BLOCKED refuses 19 motion/sensor APIs ("tbot is virtual-only").
+  T-Bot jog map is display-only (brick/port "-", P1 ratio 0.4267 mm/deg,
+  P2/P3 None = unknown drive, honest).
+- Client (same file, kind-branched): robot select in bar (reload on
+  switch); fkine prismatic translation branch; qNative/qvec replace all
+  deg->rad maps; joint-count loops generalized (mrjos values identical);
+  joint panel + ranges show mm for prismatic; isConnected false for tbot
+  (send row hidden, body follows IK); mode banner "+ T-Bot".
+- ui_smoke.py: --phase tbot (select -> banner/panel/send-hidden checks ->
+  ik-reach -> live<=5mm). Not run here; user runs with browser.
+- Verify: socket-free API check 14/14 PASS (model/kinds/ee/mode/table/
+  ranges/overview/reachable/ik pos_err 6.8e-9/goto+ jog blocked/visual/
+  mrjos reselect 6R); tests/test_control.py + test_mini_console.py 61
+  passed; regress_mrjos.sh RESULT: NO DIFFERENCE (410 passed).
+- Private meshes: none built; T-Bot uses primitives by default;
+  --private-visuals tbot would serve visual_pack/tbot/*.glb (absent).
