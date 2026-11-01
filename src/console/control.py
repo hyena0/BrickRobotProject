@@ -2547,11 +2547,13 @@ async function poll() {
     const unhomed = o.joints.some((j) => !j.homed);
     const cl = document.getElementById("cal-link");
     if (cl) cl.style.display = unhomed ? "" : "none";
-    const conn = (L !== null && R !== null);
     try {
       const md = await post("/api/mode", {});
       if (md.ok) VIRT = !!md.virtual;
     } catch (err) { /* keep last VIRT */ }
+    // isConnected() is robot-aware (T-Bot virtual-only never connects);
+    // identical to the latch check for MR JOS.
+    const conn = isConnected();
     el("mode", (conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
                     : "가상만(브릭 미연결)") +
       (ROBOT === "tbot" ? " T-Bot" : ""), conn ? "ok" : "bad");
@@ -2835,7 +2837,10 @@ async function solveIK(seedQ) {
   try {
     const qd = {};
     for (const j of MODEL.joints) qd[j.id] = sol[j.id];
-    const pv = await post("/api/preview", {q_deg: qd});
+    // T-Bot has no motor map and /api/preview refuses it (400, which
+    // also pollutes the console error log), so skip the motor preview.
+    const pv = ROBOT === "tbot" ? {ok: false}
+      : await post("/api/preview", {q_deg: qd});
     if (pv.ok) {
       const ms = pv.motors.map((m) => m.motor + "=" + m.target).join(" ");
       previewRange = pv.range;
