@@ -411,7 +411,7 @@ def classify(title: str) -> dict:
         return entry
     if "gear rack" in low:
         entry.update(category="rack", review=True)
-        entry["evidence"] += "; curved rack, teeth counted in Stage 3"
+        entry["evidence"] += "; rack, teeth counted in Stage 3"
         return entry
     if "driving ring" in low:
         entry.update(category="gear", gear_kind="ring", review=True)
@@ -442,19 +442,35 @@ def classify(title: str) -> dict:
         return entry
     # Structural joiners before axle/pin keywords: many connector
     # titles mention the fasteners they accept.
-    if "connector" in low or "joiner" in low or "toggle" in low:
+    if "connector" in low or "joiner" in low or "toggle" in low \
+            or "cross block" in low:
         entry.update(category="connector")
         entry["evidence"] += "; structural connector, holes from geometry"
+        return entry
+    if "motor" in low:
+        size = ("small" if "small" in low else
+                "medium" if "medium" in low else
+                "large" if "large" in low else None)
+        entry.update(category="motor", motor=size, review=True)
+        entry["evidence"] += f"; non-EV3 motor, size {size}"
+        return entry
+    if "hub" in low:
+        entry.update(category="brick", review=True)
+        entry["evidence"] += "; electric hub as brick"
         return entry
     if "plate" in low or "slope" in low:
         entry.update(category="brick", review=False)
         entry["evidence"] += "; plate/slope, stud-joined (tool limitation)"
         return entry
-    m_axle = re.search(r"\baxle\s+(\d+)\s*l\b", low)
+    m_axle = re.search(r"\baxle\s+(\d+)", low)
     if m_axle and "connector" not in low and "hub" not in low:
         n = int(m_axle.group(1))
         entry.update(category="axle", axle_length=n)
         entry["evidence"] += f"; axle {n}L"
+        return entry
+    if "axle" in low and "pin" in low:
+        entry.update(category="axle")
+        entry["evidence"] += "; axle-pin family"
         return entry
     if re.match(r"technic,\s*pin\b", low):
         friction = "without friction" not in low and "friction" in low

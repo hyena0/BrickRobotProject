@@ -11,7 +11,23 @@ from __future__ import annotations
 
 import os
 
-from src.catalog.review import Library
+from src.catalog.review import Library, classify
+
+
+def test_classify_general_rules_beyond_ev3():
+    # Length without L, axle-pin family, cross blocks, non-EV3
+    # electrics, neutral rack wording. EV3 precedents must not move.
+    assert classify("Technic, Axle 32")["category"] == "axle"
+    assert classify("Technic Axle Pin")["category"] == "axle"
+    assert classify(
+        "Technic Cross Block 1 x 3 (Pin/Pin/Pin)")["category"] == "connector"
+    spike = classify("Electric, Motor SPIKE Prime, Small Angular")
+    assert (spike["category"], spike["motor"]) == ("motor", "small")
+    assert classify("Electric Control+ Hub")["category"] == "brick"
+    assert "curved" not in classify(
+        "Technic Gear Rack 1 x 14")["evidence"]
+    assert classify("Electric, Motor EV3, Large")["motor"] == "large"
+    assert classify("Electric Mindstorms EV3")["category"] == "brick"
 
 
 def _write(root, rel, text):
