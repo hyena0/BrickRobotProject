@@ -353,3 +353,36 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   encoders), /api/mode virtual + motion blocked, /api/visual D0..D3,
   plus a static guard banning hardcoded joint counts / D-link lists in
   the console JS. 44 passed in file; regress green (415 passed).
+
+## Finishing-4c LDraw auto-detect + T-Bot pack and renders
+
+- Bug (bugs/LDraw error.png): LDraw option disabled with "플래그 필요"
+  because the server ran without --private-visuals. Fix: per-robot pack
+  auto-detect (ROBOT_PACKS mrjos->robot_inferred, tbot->tbot); an
+  explicit matching flag keeps legacy blind serving, a mismatched one
+  falls back to the robot's pack (never shows another robot's meshes).
+  Same-origin/no-store/never-in-git unchanged. Bare `python -m
+  src.console.control` now offers MR JOS LDraw.
+- T-Bot pack (private, git-ignored): built with the generic pure-python
+  builder, no code changes:
+  `build_link_meshes --ldr <MOC-85202 v4> --links tbot_viz_links.json
+  --package tbot_package.json --robot tbot` (966 parts, 0 missing lib
+  parts). D0=base, D1=top, D2=vertical minus proposal, D3=plunger
+  proposal (PROVISIONAL, human confirm pending; division/analysis
+  untouched; rebuild if rejected). 1,603,698 tris (D0 76MB, chain-heavy;
+  same order as MR JOS pack).
+- AABB check caught a method gap first: origins-bbox+15pad overhangs
+  asymmetric parts by ~11mm on every link (frame agreement was fine:
+  center_dev 0.2/4.9/57.6/8.0). Envelopes refitted to built mesh AABBs
+  (data-only, private package); rebuild check green (exit 0).
+- Renders (assets/private/renders/tbot/): pack_home.png + pack_posed.png
+  (P1+120/P2+80/P3+47 rigid link offsets = console FK frames) rendered
+  from parsed GLB vertices — Blender headless crashes in this sandbox
+  at GPU/Metal init, before any script runs. Assembly verified by eye:
+  gantry frame + X carriage + vertical + plunger, no holes; posed frame
+  shows all three motions on the right links.
+- Maintained tests: resolver unit tests (tmp dirs) + auto-advertise +
+  mismatch-fallback; test_visual_primitives_only rewritten
+  deterministically (gated pack). File green 69 passed (control+mini);
+  regress NO DIFFERENCE; socket-free API check 16/16 (incl. both auto
+  packs); embedded JS node --check OK.
