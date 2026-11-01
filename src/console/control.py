@@ -2511,8 +2511,10 @@ async function poll() {
     const follow = fEl ? fEl.checked : false;
     const jtEl = document.getElementById("joints");
     for (const j of o.joints) {
-      if (follow)
-        qdeg[j.joint] = j.joint_deg === null ? 0 : j.joint_deg;
+      // Null readings (no encoders, e.g. virtual-only T-Bot) must not
+      // clobber the IK-follow pose back to zero on every poll.
+      if (follow && j.joint_deg !== null && j.joint_deg !== undefined)
+        qdeg[j.joint] = j.joint_deg;
       const jog = j.direction === "confirmed" ? ""
         : (uOf(j.joint) === "mm" ? " (최대±5mm)" : " (최대±5°)");
       html += "<tr><td>" + j.joint + "</td><td>" +

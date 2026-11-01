@@ -300,6 +300,13 @@ def run_tbot(page, base, args, rows):
            (f" {det}" if det else ""))
     rows.append(("tbot: reachable target, body follows, live<=5mm",
                  live is not None and live <= 5.0, det))
+    # No-encoder follow must HOLD the pose across polls (2s period):
+    # the body used to snap back to origin here.
+    page.wait_for_timeout(4500)
+    live2 = _dist_from(page.text_content("#ik-live"))
+    rows.append(("tbot: pose holds after polls, live<=5mm",
+                 live2 is not None and live2 <= 5.0,
+                 f"live={live2}"))
     page.screenshot(path=f"{args.out}/shot-tbot.png")
 
 
