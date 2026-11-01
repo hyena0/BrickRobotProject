@@ -65,4 +65,64 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   rail-like structure — 50450 axle-32 x6, beams 15/13/11 (32278/41239/32525),
   71710/73507 long liftarms, 64782 panel 5x11.
 
-## T.2 — next (unchanged Stages 1–4 run, no hints, no code changes)
+## T.1b catalog geometry fill — done (data only)
+
+- Same method as MR JOS (`review_part`: title + Studio-tree geometry, /tmp probes).
+  Titles re-checked from `.dat` headers. **11955 teeth: 8 tooth placements counted
+  in geometry — title confirmed.** Racks: 18942 32 teeth at 8.0 LDU counted;
+  18940 same 1x14 profile/periodicity (teeth built from boxes, 32 by family).
+  Pitch 8 LDU = 3.2 mm (both). 50450: single axle.dat scaled 640 LDU = 32L along X.
+  54696 shaft line Y from 2 collinear axle bores (output end unconfirmed).
+- Filled: axes for 11955/24375/3749/39794/43857/48989/50450/54696/65249/71710/73507;
+  holes for 11955(2) / 43857(6) / 48989(6) / 39794(72) / 71710(43) / 73507(31);
+  teeth 11955=8, 18940/18942=32. review:false where title+geometry agree (9 of 17
+  stay true: racks-18940, pins, chain, 3749, 39794-frame, 48989, motor).
+- Judgment calls (documented in evidence): 24375 rubber→friction true (textual rule
+  says frictionless); 3749→axle (mirror 43093; textual rule says pin);
+  3711/3873→neutral `other`; motor size `small` (new class).
+- Regression after fill: NO DIFFERENCE (pytest 396).
+
+## T.2 as-is run — done (no hints, no code changes; script /tmp/tbot_t2.py, private runs/stage7_tbot_t2/)
+
+- S1 tools ran fully: 966 parts; rigid groups 278 (largest 534 frame lattice,
+  255 singletons incl. chain links); 3 motors each with 2-part motor_shaft traces.
+  Gear scan (21 gear/rack parts, all pairs): 5 true meshes (8T/24T ext, 8T/8T ext,
+  24T/28T compound-shaft, 28T/8T ext, 12T/12T bevel) + 2 same-shaft compounds.
+  **Racks mesh with nothing** (no rack rule, gear_kind null). **Chain invisible**
+  (category other, outside powertrain step-a).
+- S2: `joint_candidates` ran: 278 groups → 37 powertrain → 17 structural candidates
+  (fitted axes, err 0–31 mm, n=5–34; table in t2_report.json). chain_run BLOCKED
+  (needs --div; MPD blocks are designer grouping = hint, not used). joints_run
+  BLOCKED (needs Stage-3 motor_paths + Spark selection).
+- S3: `gear_graph` ran: 19 nodes, 4 edges, motor_drive 2→A18 + 1→A3, **intra_meshes
+  1 (A17 bevel pair p000132×p000133 rigidly connected yet meshing)**.
+  build_topology BLOCKED (needs div+joints). No automated ratios exist.
+- S4 assemble BLOCKED (no joints doc / coupling / ports file for T-Bot).
+- Result: links = 278 rigid groups (no segmentation); joints = 17 unselected
+  candidates, all revolute-hypothesis; ratios = none; coupling = none.
+  Rack-pinion and chain drive unrecognized — expected generalisation failure,
+  not fixed.
+
+## Fix-approval list (no fixes without human approval)
+
+1. `classify()` wrong-category defaults (50450→beam, 48989→pin, 3749→pin,
+   motors/hub→beam) + "curved rack" evidence text for straight racks. Propose:
+   general title rules (axle-N without L, SPIKE/Control+ electric, straight-rack
+   wording). Data already overrides; this is future-model hygiene.
+2. intra_meshes non-empty (A17 double-bevel pair). Propose: investigate whether
+   rigid-grouping or the bevel rule misfires; no fix sketched yet.
+3. Motor size `small` unhandled downstream (codegen default medium, ev3 expects
+   large/medium). Propose: carry the string through (display) until T.3 drive work.
+4. Data watch (no code): 43857 'Beam 2' with 6 holes; 71710/73507 asymmetric
+   side-hole rows — measured as-is, human eyeball welcome.
+
+## T.3 proposal (scope only, not started)
+
+- Rack+pinion → prismatic joint: rack tooth line (placements on file) + mating
+  pinion from proximity/phase (T.2 found none — identification is the work);
+  travel = pinion_teeth × 3.2 mm/rev.
+- Chain+sprocket → prismatic (virtual): loop path from 199 links + engaging
+  sprockets; travel = links/rev × link pitch (link pitch still to measure).
+- Guardrails: new functions only, no threshold edits, no existing-function
+  rewrites; MR JOS regress must stay green (24121 slew ring must not reclassify).
+  2 h box per addendum.
