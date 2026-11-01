@@ -334,3 +334,22 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   passed; regress_mrjos.sh RESULT: NO DIFFERENCE (410 passed).
 - Private meshes: none built; T-Bot uses primitives by default;
   --private-visuals tbot would serve visual_pack/tbot/*.glb (absent).
+
+## Finishing-4b T-Bot page-load fix + MR JOS LDraw restore
+
+- Bug (bugs/Tbot_UI_bug.png): after switching to T-Bot every page stuck
+  at "로딩…" (robot select too). Root cause: capsule segment builder used
+  hardcoded `(i < 5) ? m.joints[i+1].point : e0` — TypeError at i=2 for
+  the 3-joint model, initModel rejected, the .then chain (initRobot,
+  section display, poll) never ran. Fix: `i < m.joints.length - 1`.
+- LDraw: loader used hardcoded D0..D6; now takes link ids from
+  /api/visual (D0..D6 MR JOS unchanged, D0..D3 T-Bot). /api/poses shows
+  safe-pose "q" values too (was q_deg only, empty for T-Bot).
+- MR JOS LDraw needs `--private-visuals robot_inferred` (pack dir name)
+  at launch; primitives stay default. Server robot state is sticky:
+  restart the server to return to MR JOS after the T-Bot crash state.
+- Maintained tests (tests/test_control.py, no private files): synthetic
+  3-prismatic gantry through /api/model (mm kinds), /api/overview ("?"
+  encoders), /api/mode virtual + motion blocked, /api/visual D0..D3,
+  plus a static guard banning hardcoded joint counts / D-link lists in
+  the console JS. 44 passed in file; regress green (415 passed).
