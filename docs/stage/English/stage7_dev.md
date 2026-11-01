@@ -386,3 +386,21 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   deterministically (gated pack). File green 69 passed (control+mini);
   regress NO DIFFERENCE; socket-free API check 16/16 (incl. both auto
   packs); embedded JS node --check OK.
+
+## Finishing-4d T-Bot snap-back fix (follow-live null guard)
+
+- Bug (bugs/Tbot_e_2~4.png): after a gizmo move the body followed, then
+  snapped back to origin within ~2s. Root cause: the default-checked
+  "follow-live" poll ran `qdeg = joint_deg ?? 0` every 2s; T-Bot has no
+  encoders (readback null), so each poll zeroed the IK-follow pose.
+  Same latent race existed in MR JOS virtual mode; connected mode (real
+  readings) is byte-identical behavior.
+- Fix (1-line JS): only follow non-null readings. ui_smoke tbot phase
+  gains a holds-pose row (4.5s wait, live<=5mm) as the maintained
+  regression test for this bug.
+- Self-verification attempt: server bind needs sandbox approval
+  (granted); user server on 8766 left untouched, test server on 8767 up
+  (since terminated). Real Chrome (channel="chrome") SIGABRTs inside
+  this sandbox and bundled chromium is absent (never install per
+  policy), so browser proof stays with the user smoke run.
+- File green 69 passed; regress NO DIFFERENCE; JS node --check OK.
