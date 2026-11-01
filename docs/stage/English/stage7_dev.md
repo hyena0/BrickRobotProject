@@ -447,3 +447,25 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   (slim rack+axle separates from the blue head in posed frame).
 - No source-code change, so no regress run; verification is the builder
   AABB check + manifest + renders.
+
+## Stage 7 close-out (human decision: HW absent)
+
+- Goal met: MOC-85202 T-Bot analyzed with the existing pipeline under
+  the regression-prevention criteria (no model-specific handling, no MR
+  JOS result change, no whole-function rewrites). Final regress:
+  NO DIFFERENCE. ~30 stage-7 commits, all with reasons + regress notes.
+- Closed as UNCONFIRMED (no real HW connected, cannot verify): port
+  A/B/C <-> motor-uid mapping; M1/M2 <-> movement-1/2 split; P2/P3
+  mm-per-rev (no motor-sprocket train found); P3 symmetric
+  mid-engagement assumption; chain loop closure (25 parts off-path);
+  rack-mate identification for P2/P3.
+- Left PENDING (intentionally not done): connected/virtual smoke phases
+  (tbot phase PASS in real browser); Blender beauty render (mesh-vertex
+  verification renders exist); T-Bot ports file; pred_C/coupling
+  inference automation; 8T-pinion-vs-red-rack vs gray-rack drive-path
+  disambiguation beyond the confirmed split.
+- Delivered and green: baseline + regress script + tag; 966-part parse
+  (64/64 catalog); division + motor_paths + generic prompt; linear
+  joints + prismatic FK/IK/closed-form/MuJoCo (20/20); motion figures;
+  T-Bot console (virtual-only, mm panel, gizmo IK, LDraw pack D0..D3
+  with confirmed 2-part plunger); LDraw auto-detect (MR JOS + T-Bot).
