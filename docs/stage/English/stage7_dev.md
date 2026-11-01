@@ -205,6 +205,30 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
 - Racks (VERT p126/p127): mating pinions unidentified → T.3.
 - Regression still green (397 passed). Awaiting user motor_paths.
 
+## Division confirmed + user movements/motor_paths (human input, MR JOS level)
+
+- Div file confirmed as-is. Base intentionally holds the chain (drive part) and
+  undisplaced carriages — 845 is one rigid pose, not one physical link.
+- User table: 1/top_shuttle/A/chain+gear/좌우; 2/vertical_axis/B/chain+gear/상하;
+  3/plunger/C/gear/전후. Structure: 1:1 drives, NO co-drive; movement 3 is a
+  gear-driven plunger nested inside the vertical rigid group (independent motion
+  human-confirmed, not rigidly segmented).
+- Saved (private): runs/stage7_tbot_t2/motor_paths.json, provenance "agent
+  proposal + human confirmation". Chains end at verified terminals (p31 TOP,
+  p133 VERT, p5 BASE); chain hops human-confirmed (640/453 mm, no mesh edge).
+  UNCONFIRMED: port A/B/C ↔ uid p1/p2/p3; M1/M2 ↔ movements 1/2 (same cluster);
+  M3→3 by drive-type elimination only.
+
+## T.2b pipeline (MR JOS order; Spark cost restated: 1–3 calls, order $0.1)
+
+- gear_graph with div link_of: 20 nodes, 4 edges, M1+M2→A19, M3→A3 (was A18
+  without links). intra still 1 (bevel pair).
+- joints_run launched (run-id stage7-tbot-joints, assembled poses + catalog +
+  motor_paths terminals). Awaiting Spark selection + consistency verdict.
+- build_topology: NOT run by design (needs div joints + injects MR JOS RING140
+  virtual gear — running it on T-Bot would be model contamination).
+- assemble: pending joints doc; coupling (pred_C) absent for T-Bot — expect block.
+
 ## T.3 re-proposal (after T.2 + approvals)
 
 - Same two extensions, tightened inputs: rack tooth lines + 3.2 mm pitch are
