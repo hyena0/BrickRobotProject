@@ -415,3 +415,20 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
 - Fix: banner uses isConnected() (identical for MR JOS, virtual-only
   for T-Bot); solveIK skips the motor preview for T-Bot (no motor map).
 - File green 69 passed; regress NO DIFFERENCE; JS node --check OK.
+
+## Finishing-1 plunger split confirmed (red rack stays)
+
+- Human confirm: separate plunger; red rack 18940 p000126 (colour 4,
+  with housing) stays attached to vertical; only plunger moves
+  front-back; travel must not leave the gear (pinion stays engaged).
+- Applied: D3 = proposal minus p000126 (45 parts, incl. gray rack 18942
+  + 8T pinion 10928 p000090); D2 = 22 rails + p000126 (23 parts).
+  Totals 845+53+23+45=966. tbot_div_links.json (human 3-link div)
+  untouched; split lives in tbot_viz_links.json + model doc.
+- Travel: P3 limits unchanged +-47.2 (rack span 102.4 minus pinion dia
+  8; red 18940 shares the 1x14/8-LDU family profile; symmetric
+  mid-engagement assumption recorded in model comment).
+- Pack rebuilt + refit (AABB green, exit 0); pack_home/posed re-rendered
+  and eyeballed (red rack rides blue vertical, red plunger moves alone).
+- No source-code change, so no regress run (pipeline untouched); pack
+  AABB check + manifest + renders are the verification.
