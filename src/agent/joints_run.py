@@ -50,6 +50,10 @@ def main() -> None:
     ap.add_argument("--catalog", required=True)
     ap.add_argument("--stage3", required=True)
     ap.add_argument("--run-id", required=True)
+    ap.add_argument("--prompt-profile", default="mrjos",
+                    choices=("mrjos", "generic"),
+                    help="mrjos: frozen legacy prompt; generic: no "
+                         "model-specific lore, movements from --stage3")
     args = ap.parse_args()
 
     from src.tools import geometry as geom
@@ -57,13 +61,16 @@ def main() -> None:
     catalog = geom.load_catalog(args.catalog)
     stage3 = _load_json(args.stage3)
     terminals = _terminals(stage3, parts)
+    movements = stage3.get("user_movements") or stage3.get("movements")
 
     from openai import OpenAI
     client = OpenAI(
         base_url="https://api.meta.ai/v1",
         api_key=os.environ.get("META_API_KEY")
         or os.environ.get("MODEL_API_KEY"))
-    result = joints_spark.run_selection(client, parts, catalog, terminals)
+    result = joints_spark.run_selection(client, parts, catalog, terminals,
+                                        profile=args.prompt_profile,
+                                        movements=movements)
     doc = result["doc"]
     errors = validate_links_joints(doc)
     out_dir = os.path.join("runs", args.run_id)

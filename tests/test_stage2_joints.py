@@ -147,6 +147,21 @@ def test_spark_retry_loop_stops_at_three():
     assert result["doc"]["method"] == "joints-spark-selection"
 
 
+def test_prompt_profiles_generic_has_no_model_lore():
+    mrjos = joints_spark.build_prompt("mrjos", "T", "B", "E")
+    assert mrjos == joints_spark.PROMPT.format(
+        table="T", base="B", ee="E", failure="")
+    gen = joints_spark.build_prompt(
+        "generic", "T", "B", "E",
+        movements={"1": {"link": "top", "mode": "chain"}})
+    for token in ("149", "slew", "6-axis", "differentially",
+                  "typically 6"):
+        assert token not in gen
+    assert "Human-confirmed movements (1)" in gen
+    bare = joints_spark.build_prompt("generic", "T", "B", "E")
+    assert "purely from the evidence" in bare
+
+
 def test_overlay_marks_selected_and_dropped():
     pred = {"links": [{"id": "G0", "members": ["a"]}],
             "joints": [

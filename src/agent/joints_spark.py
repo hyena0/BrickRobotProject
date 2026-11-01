@@ -83,13 +83,65 @@ def _parse_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
+GENERIC_PROMPT = """\
+Pick the robot joints from these candidates. Evidence per candidate:
+supports = fitted axis support-point count; fit_err_mm = axis fit error;
+sweep = estimated motion range before first new collision (+/- deg);
+motor = motor uid whose drive path ends nearest this candidate, with
+distance in mm (or none); groups = parent/child rigid-group ids with
+member counts.
+
+Base link: {base}. End-effector link: {ee}.
+{movements}
+Candidates:
+{table}
+
+{failure}Reply with JSON only:
+{{"selected": [{{"candidate": <idx>, "id": "J1"..., "reason": "..."}}],
+  "dropped": [{{"candidate": <idx>, "reason": "..."}}]}}
+Rules: ids J1.. in base-to-tip order; every candidate is either selected
+or dropped; a dropped candidate keeps its fitted axis/point for display.
+Every motor in the table MUST land on a selected joint; leaving a
+motor's candidate unselected fails validation. Connectivity gaps are
+recorded, never punished: selecting only motor-less chassis pins to
+fake a connected chain is wrong. Prefer candidates with a motor path;
+clusters of identical small pins far from any motor path are chassis
+detail, not robot joints. Reject fits with fit_err_mm above ~5 unless
+the sweep range and motor evidence both support them. Do NOT drop an
+arm joint merely for lacking a motor path: keep it and say what drive
+evidence is missing. Never assert model-specific drive lore (named
+parts, mechanisms, or couplings): report only what this table shows.
+"""
+
+
+def build_prompt(profile: str, table: str, base: str, ee: str,
+                 failure: str = "",
+                 movements: dict | None = None) -> str:
+    """Render the selection prompt. `mrjos` is the frozen legacy prompt;
+    `generic` takes expected movements only from human input."""
+    fail = (f"Previous selection failed consistency:\n{failure}\n"
+            if failure else "")
+    if profile == "generic":
+        if movements:
+            names = ", ".join(
+                f"{k} ({v.get('link', '?')}, {v.get('mode', '?')})"
+                for k, v in movements.items())
+            mov = (f"Human-confirmed movements ({len(movements)}): "
+                   f"{names}. Select about one joint per movement; "
+                   f"select fewer or more only with evidence.")
+        else:
+            mov = ("No human movement count provided: select purely "
+                   "from the evidence below.")
+        return GENERIC_PROMPT.format(
+            table=table, base=base, ee=ee, failure=fail, movements=mov)
+    return PROMPT.format(table=table, base=base, ee=ee, failure=fail)
+
+
 def select_joints(client, table: str, base: str, ee: str,
-                  failure: str = "") -> dict:
+                  failure: str = "", profile: str = "mrjos",
+                  movements: dict | None = None) -> dict:
     """One Spark selection turn. `client` exposes `responses.create`."""
-    prompt = PROMPT.format(
-        table=table, base=base, ee=ee,
-        failure=(f"Previous selection failed consistency:\n{failure}\n"
-                 if failure else ""))
+    prompt = build_prompt(profile, table, base, ee, failure, movements)
     response = client.responses.create(
         model="muse-spark-1.3-contributor",
         instructions=SYSTEM,
@@ -159,7 +211,8 @@ def assign_motors(cands: list[dict], terminal_mm: dict[str, list]) -> dict:
 
 def run_selection(client, parts: list[dict], catalog: dict,
                   terminal_mm: dict[str, list],
-                  max_attempts: int = 3) -> dict:
+                  max_attempts: int = 3, profile: str = "mrjos",
+                  movements: dict | None = None) -> dict:
     """Full loop: candidates -> sweep -> Spark -> consistency (x3)."""
     found = jtools.joint_candidates(parts, catalog)
     cands = found["candidates"]
@@ -177,7 +230,8 @@ def run_selection(client, parts: list[dict], catalog: dict,
     attempt_docs: list[dict] = []
     while True:
         attempts += 1
-        selection = select_joints(client, table, base, ee, failure)
+        selection = select_joints(client, table, base, ee, failure,
+                                  profile, movements)
         doc, index_to_jid = _build_doc(parts, catalog, cands, selection)
         attempt_docs.append({"attempt": attempts, "doc": doc,
                              "selection": selection})
