@@ -1109,7 +1109,9 @@ class _Handler(mini._Handler):
             for run in stored.get("poses", []) or []:
                 last[run["pose"]] = run["error_deg"]
             return {"ok": True,
-                    "poses": [{"id": p["id"], "q_deg": p.get("q_deg", []),
+                    "poses": [{"id": p["id"],
+                               "q_deg": p.get("q_deg", [])
+                               or p.get("q", []),
                                "last_error_deg": last.get(p["id"])}
                               for p in pkg.get("safe_poses", [])]}
         if path == "/api/pose":
@@ -1869,7 +1871,7 @@ async function initModel() {
   const e0 = MODEL.ee_mm;
   for (let i = 0; i < m.joints.length; i++) {
     const a = m.joints[i].point;
-    const b = (i < 5) ? m.joints[i + 1].point : e0;
+    const b = (i < m.joints.length - 1) ? m.joints[i + 1].point : e0;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     const r = segRadius(i);
     const mesh = new THREE.Mesh(
@@ -2147,7 +2149,18 @@ async function loadMeshes() {
     return;
   }
   const loader = new GLTFLoader();
-  const ids = ["D0", "D1", "D2", "D3", "D4", "D5", "D6"];
+  // Link ids come from /api/visual (D0..D6 MR JOS, D0..D3 T-Bot):
+  // never a hardcoded 7-link list.
+  const ids = Object.keys(MESHES.urls);
+  if (!ids.length) {
+    document.getElementById("vmsg").textContent =
+      "LDraw 링크 없음 (기본 도형 유지)";
+    document.getElementById("vsrc").value = "primitives";
+    VSRC = "primitives";
+    MESHES.loading = false;
+    applyVis();
+    return;
+  }
   let done = 0;
   for (const lid of ids) {
     loader.load(MESHES.urls[lid], (gltf) => {

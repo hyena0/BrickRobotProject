@@ -575,3 +575,80 @@ def test_pages_share_server_state(handler, tmp_path, monkeypatch):
     s2, m2 = h2.dispatch_api("/api/mode", {})
     assert (s1, m1["connected"]) == (200, True)
     assert (s2, m2["connected"]) == (200, True)
+
+
+def _gantry_doc():
+    """Synthetic 3-prismatic gantry (no private files needed)."""
+    return {
+        "robot": "synthetic-gantry",
+        "links": [{"id": l} for l in ("base", "a", "b", "c")],
+        "joints": [
+            {"id": "P1", "type": "prismatic", "parent": "base",
+             "child": "a", "axis": [1, 0, 0], "point_mm": [0, 0, 0],
+             "limits_mm": [-10.0, 10.0]},
+            {"id": "P2", "type": "prismatic", "parent": "a",
+             "child": "b", "axis": [0, 0, -1], "point_mm": [0, 0, 5],
+             "limits_mm": [-8.0, 8.0]},
+            {"id": "P3", "type": "prismatic", "parent": "b",
+             "child": "c", "axis": [0, 1, 0], "point_mm": [0, 0, 5],
+             "limits_mm": [-4.0, 4.0]},
+        ],
+        "actuators": [{"id": "A"}, {"id": "B"}, {"id": "C"}],
+        "base": {"link": "base"},
+        "end_effector": {"link": "c", "point_mm": [0, 4.0, 5.0]},
+    }
+
+
+def _gantry_handler(handler):
+    handler.robot = "tbot"
+    handler.model_doc = _gantry_doc()
+    handler.jog_map = ctl.tbot_jog_map()
+    return handler
+
+
+def test_prismatic_model_payload_marks_mm(handler):
+    _gantry_handler(handler)
+    status, res = handler.dispatch_api("/api/model", {})
+    assert status == 200 and res["ok"]
+    assert [(j["id"], j["kind"], j["unit"])
+            for j in res["joints"]] == [
+        ("P1", "prismatic", "mm"), ("P2", "prismatic", "mm"),
+        ("P3", "prismatic", "mm")]
+    assert res["ee_mm"] == [0, 4.0, 5.0]
+
+
+def test_prismatic_overview_unknown_encoders(handler):
+    _gantry_handler(handler)
+    status, res = handler.dispatch_api("/api/overview", {})
+    assert status == 200 and res["ok"]
+    assert [j["joint"] for j in res["joints"]] == ["P1", "P2", "P3"]
+    assert all(j["joint_deg"] is None for j in res["joints"])
+
+
+def test_tbot_mode_virtual_and_motion_blocked(handler):
+    _gantry_handler(handler)
+    status, res = handler.dispatch_api("/api/mode", {})
+    assert status == 200 and res["virtual"] and not res["connected"]
+    for path in ("/api/jog", "/api/goto", "/api/home_joint"):
+        status, res = handler.dispatch_api(
+            path, {"joint": "P1", "delta": 1.0,
+                   "q_deg": {"P1": 0.0, "P2": 0.0, "P3": 0.0}})
+        assert status == 400 and "virtual-only" in res["error"]
+
+
+def test_visual_link_count_follows_chain(handler):
+    _gantry_handler(handler)
+    handler.private_visuals = "somepack"
+    status, res = handler.dispatch_api("/api/visual", {})
+    assert status == 200
+    assert sorted(res["links"]) == ["D0", "D1", "D2", "D3"]
+
+
+def test_console_js_has_no_hardcoded_joint_counts():
+    import re
+
+    src = pathlib.Path(ctl.__file__).read_text(encoding="utf-8")
+    js = src.split('<script type="module">', 1)[1]
+    assert not re.findall(r"\b[ik] <=? [56]\)", js)
+    assert "m.joints[i + 1]" in js
+    assert '"D0", "D1", "D2", "D3", "D4", "D5", "D6"' not in js
