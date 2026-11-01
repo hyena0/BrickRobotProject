@@ -65,6 +65,9 @@ class BrickCore:
         self.guards = guards.SafetyController()
         self.pending_events = []
         self.missing = []
+        # Boot marker: PC compares uptime_ms across console restarts to
+        # tell "same boot, calibration still valid" from "rebooted".
+        self.boot_ms = clock.now_ms()
 
     def snapshot(self):
         encoders = {}
@@ -77,6 +80,7 @@ class BrickCore:
             "brick": self.brick,
             "encoders": encoders,
             "sensors": values,
+            "uptime_ms": clock.diff_ms(clock.now_ms(), self.boot_ms),
             "latched": self.guards.latched,
             "latch_reason": self.guards.latch_reason,
             "missing": list(self.missing),

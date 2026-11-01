@@ -28,10 +28,12 @@ class _FakeControl:
 
 
 class Motor:
-    def __init__(self, port, positive_direction=None, gears=None):
+    def __init__(self, port, positive_direction=None, gears=None,
+                 reset_angle=True):
         if port in _MISSING:
             raise OSError(19, "ENODEV")
         self.port = port
+        self.reset_angle = reset_angle
         self._angle = 0.0
         self._target = 0.0
         self._speed = 0.0

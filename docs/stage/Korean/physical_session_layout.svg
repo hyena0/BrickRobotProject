@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="680" viewBox="-300 -120 480 540" font-family="sans-serif">
+  <title>실물 세션 배치도 (위에서 본 그림, 단위 mm)</title>
+  <!-- 1 unit = 1 mm. x right, y forward (away). Pedestal top = z 0. -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="none" stroke="#333" stroke-width="1.2"/>
+    </marker>
+  </defs>
+
+  <!-- pedestal (recommended minimum) -->
+  <rect x="-260" y="-90" width="420" height="450" fill="#f4f1ea" stroke="#333" stroke-width="2"/>
+  <text x="-250" y="-70" font-size="13" fill="#333">받침대 (권장 최소 420×450×220mm)</text>
+
+  <!-- A3 mat paper (recommended placement covering all points) -->
+  <rect x="-260" y="80" width="420" height="297" fill="none" stroke="#1a6fd4" stroke-width="1.5" stroke-dasharray="7 4"/>
+  <text x="-250" y="100" font-size="13" fill="#1a6fd4">매트 종이 A3 가로 (권장 위치)</text>
+
+  <!-- robot base outline -->
+  <rect x="-61.8" y="-4.1" width="191.6" height="167.2" fill="#d9d9d9" stroke="#333" stroke-width="1.5"/>
+  <text x="-55" y="20" font-size="13" fill="#333">베이스</text>
+  <circle cx="34" cy="79.5" r="3" fill="#333"/>
+  <text x="40" y="82" font-size="11" fill="#333">원점(34, 79.5)</text>
+
+  <!-- measured mat points bbox -->
+  <rect x="-227.1" y="126.7" width="237.1" height="204.6" fill="none" stroke="#999" stroke-width="1"/>
+  <text x="-227" y="120" font-size="11" fill="#666">매트 실측점 범위</text>
+
+  <!-- slots S1..S6 -->
+  <g font-size="12" text-anchor="middle">
+    <rect x="-216" y="134" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-200" y="148" fill="#c00">S1</text>
+    <text x="-200" y="160" fill="#666" font-size="9">-200,150</text>
+    <rect x="-136" y="134" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-120" y="148" fill="#c00">S2</text>
+    <text x="-120" y="160" fill="#666" font-size="9">-120,150</text>
+    <rect x="-216" y="214" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-200" y="228" fill="#c00">S3</text>
+    <text x="-200" y="240" fill="#666" font-size="9">-200,230</text>
+    <rect x="-136" y="214" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-120" y="228" fill="#c00">S4</text>
+    <text x="-120" y="240" fill="#666" font-size="9">-120,230</text>
+    <rect x="-216" y="294" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-200" y="308" fill="#c00">S5</text>
+    <text x="-200" y="320" fill="#666" font-size="9">-200,310</text>
+    <rect x="-136" y="294" width="32" height="32" fill="#fff" stroke="#c00" stroke-width="1.5"/>
+    <text x="-120" y="308" fill="#c00">S6</text>
+    <text x="-120" y="320" fill="#666" font-size="9">-120,310</text>
+  </g>
+
+  <!-- camera pole -->
+  <circle cx="-133" cy="-60" r="6" fill="none" stroke="#1a6fd4" stroke-width="2"/>
+  <text x="-121" y="-56" font-size="12" fill="#1a6fd4">카메라 기둥 (-133,-60) 높이 550</text>
+
+  <!-- reach circle -->
+  <circle cx="21.8" cy="79.7" r="335.3" fill="none" stroke="#999" stroke-width="1" stroke-dasharray="3 4"/>
+  <text x="120" y="-30" font-size="11" fill="#666">도달 반경 335.3 (어깨 21.8, 79.7)</text>
+
+  <!-- 100 mm scale bar -->
+  <g>
+    <line x1="-260" y1="390" x2="-160" y2="390" stroke="#333" stroke-width="3"/>
+    <text x="-255" y="382" font-size="11" fill="#333">100mm (인쇄 배율 확인용)</text>
+  </g>
+
+  <!-- dims -->
+  <g stroke="#333" stroke-width="1">
+    <line x1="-260" y1="368" x2="160" y2="368" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  </g>
+  <text x="-80" y="362" font-size="11" fill="#333">420</text>
+  <text x="168" y="150" font-size="11" fill="#333">450</text>
+  <text x="-52" y="178" font-size="10" fill="#555">베이스 191.6×167.2</text>
+</svg>

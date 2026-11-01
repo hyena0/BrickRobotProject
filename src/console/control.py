@@ -721,6 +721,83 @@ def home_joint(handler, joint, mark=False):
             "homed": bool((ack or {}).get("homed", False))}
 
 
+def _check_deviation(handler):
+    """Encoder readback vs park pose, per-joint and max (deg)."""
+    from src.console import calib_session as _cs
+
+    enc = {}
+    for brick in handler.transport.bricks:
+        try:
+            enc.update(
+                {(brick, port): motor for port, motor in
+                 handler.transport.send(brick, "read")
+                 ["encoders"].items()})
+        except Exception:
+            pass
+    record = latest_homing_record()
+    offsets = record.get("offsets", {}) or {}
+    real = mini.coupled_joint_readback(enc, handler.jog_map, offsets)
+    dev, vals = {}, {}
+    worst = None
+    for jid, want in _cs.PARK_Q_DEG.items():
+        got = real.get(jid)
+        vals[jid] = None if got is None else round(float(got), 2)
+        if got is None:
+            dev[jid] = None
+            continue
+        d = round(float(got) - float(want), 2)
+        dev[jid] = d
+        if worst is None or abs(d) > abs(worst):
+            worst = d
+    return {"q_real": vals, "dev_deg": dev, "max_abs_deg":
+            None if worst is None else round(abs(worst), 2)}
+
+
+def _calibration_flow(handler):
+    """One button: J1-J4 sensor home, J5/J6 restore-or-manual, check."""
+    from src.console import calib_session as _cs
+
+    steps = []
+    saved = _cs.load_session()
+    now = _cs.read_boot(handler)
+    cont = _cs.boot_status(saved.get("boot", {}), now)
+    steps.append({"step": "continuity", "result": cont,
+                  "boot_now": now})
+    for jid in ("J1", "J2", "J3", "J4"):
+        try:
+            r = home_joint(handler, jid)
+            steps.append({"step": "home-" + jid, "result": "homed",
+                          "method": r.get("method"),
+                          "simulated": bool(r.get("simulated"))})
+        except ValueError as e:
+            steps.append({"step": "home-" + jid, "result": "failed",
+                          "error": str(e)})
+            return {"ok": True, "flow": "stopped", "steps": steps}
+    if cont == "same" and saved.get("offsets", {}).get("J5") is not None \
+            and saved.get("offsets", {}).get("J6") is not None:
+        for jid in ("J5", "J6"):
+            write_homing_result(
+                jid, "homed", float(saved["offsets"][jid]),
+                "restored from session "
+                + str(saved.get("saved_at", "")))
+        steps.append({"step": "wrist", "result": "restored",
+                      "note": "J5/J6 offsets from session"})
+    else:
+        steps.append({"step": "wrist", "result": "need-manual",
+                      "note": "J5/J6: match the reference picture, "
+                      "then press each 'mark as 0' "
+                      "(continuity=" + cont + ")"})
+        return {"ok": True, "flow": "need-manual", "steps": steps}
+    res = move_joints(handler, dict(_cs.PARK_Q_DEG),
+                      speed=_cs.PARK_SPEED_DPS, label="flow-check")
+    dev = _check_deviation(handler)
+    steps.append({"step": "check", "result": "moved",
+                  "max_abs_deg": dev["max_abs_deg"],
+                  "note": "press 'looks right' to confirm"})
+    return {"ok": True, "flow": "done", "steps": steps,
+            "move": res, "deviation": dev}
+
+
 def reproduce_pose(handler, pose_id):
     pkg = package_doc()
     poses = {p["id"]: p for p in pkg.get("safe_poses", [])}
@@ -948,6 +1025,111 @@ class _Handler(mini._Handler):
                               mark=bool(args.get("mark", False)))
         if path == "/api/homing_spec":
             return {"ok": True, "joints": homing_spec()}
+        if path == "/api/calib/session":
+            from src.console import calib_session as _cs
+            return _cs.session_status(self)
+        if path == "/api/calib/park":
+            from src.console import calib_session as _cs
+            res = move_joints(self, dict(_cs.PARK_Q_DEG),
+                              speed=_cs.PARK_SPEED_DPS,
+                              label=_cs.PARK_LABEL)
+            record = latest_homing_record()
+            saved = _cs.save_session({
+                "boot": _cs.read_boot(self),
+                "offsets": record.get("offsets", {}) or {},
+                "park_q": dict(_cs.PARK_Q_DEG),
+                "confirmed": False, "confirmed_at": None})
+            return {"ok": True, "move": res, "saved_at": saved["saved_at"]}
+        if path == "/api/calib/restore":
+            from src.console import calib_session as _cs
+            saved = _cs.load_session()
+            now = _cs.read_boot(self)
+            cont = _cs.boot_status(saved.get("boot", {}), now)
+            if cont != "same" or not saved.get("offsets"):
+                raise ValueError(
+                    "need-recal: continuity=" + cont
+                    + " (rebooted or no saved offsets; "
+                    + "run one-button calibration)")
+            for jid, off in (saved.get("offsets", {}) or {}).items():
+                if jid in self.jog_map:
+                    write_homing_result(jid, "homed", float(off),
+                                        "restored from session "
+                                        + str(saved.get("saved_at", "")))
+            res = move_joints(self, dict(_cs.PARK_Q_DEG),
+                              speed=_cs.PARK_SPEED_DPS,
+                              label=_cs.PARK_LABEL)
+            return {"ok": True, "move": res, "continuity": cont}
+        if path == "/api/calib/check":
+            from src.console import calib_session as _cs
+            res = move_joints(self, dict(_cs.PARK_Q_DEG),
+                              speed=_cs.PARK_SPEED_DPS,
+                              label="park-check")
+            dev = _check_deviation(self)
+            return {"ok": True, "move": res, "deviation": dev}
+        if path == "/api/calib/confirm":
+            from src.console import calib_session as _cs
+            dev = _check_deviation(self)
+            if dev["max_abs_deg"] is None or \
+                    dev["max_abs_deg"] > _cs.CONFIRM_TOL_DEG:
+                raise ValueError(
+                    "not-aligned: max dev "
+                    + str(dev["max_abs_deg"])
+                    + " deg exceeds "
+                    + str(_cs.CONFIRM_TOL_DEG) + " deg")
+            saved = _cs.load_session()
+            record = latest_homing_record()
+            saved = _cs.save_session({
+                "boot": _cs.read_boot(self),
+                "offsets": (saved.get("offsets")
+                            or record.get("offsets", {}) or {}),
+                "park_q": dict(_cs.PARK_Q_DEG),
+                "confirmed": True,
+                "confirmed_at": saved.get("confirmed_at"),
+                "check": dev})
+            # Stamp the confirmation time on the saved record.
+            import datetime as _dt
+            saved["confirmed_at"] = _dt.datetime.now().isoformat(
+                timespec="seconds")
+            _cs.save_session(saved)
+            return {"ok": True, "deviation": dev,
+                    "confirmed_at": saved["confirmed_at"]}
+        if path == "/api/calib/flow":
+            from src.console import calib_session as _cs
+            return _calibration_flow(self)
+        if path == "/api/twin/slots":
+            from src.vla import twin as _twin
+            return {"ok": True, "slots": _twin.load_slots(),
+                    "ids": sorted(_twin.S.SLOT_IDS.values()),
+                    "colours": sorted(_twin.S.COLORS)}
+        if path == "/api/twin/slots/set":
+            from src.vla import twin as _twin
+            saved = _twin.save_slots(dict(args.get("slots", {}) or {}))
+            return {"ok": True, "slots": saved}
+        if path == "/api/twin/run":
+            import base64 as _b64
+            from src.console import calib_session as _cs
+            from src.vla import twin as _twin
+            out = _twin.run_twin(dict(args.get("slots", {}) or {}),
+                                 str(args.get("target", "")),
+                                 args.get("ckpt"))
+            adopted = {r["joint"]: r["adopted"]
+                       for r in ranges_payload(self)["joints"]}
+            q = {j: float(v) for j, v in
+                 zip(["J1", "J2", "J3", "J4", "J5", "J6"],
+                     out["hold_q"])}
+            refusal = check_pose_against_ranges(q, adopted)
+            if refusal:
+                raise ValueError("twin hold refused: " + refusal)
+            return {"ok": True, "policy": out["policy"],
+                    "target": out["target"], "slots": out["slots"],
+                    "hold_q": q, "rec": out["rec"],
+                    "png": _b64.b64encode(out["png"]).decode()}
+        if path == "/api/twin/rest":
+            from src.console import calib_session as _cs
+            res = move_joints(self, dict(_cs.PARK_Q_DEG),
+                              speed=_cs.PARK_SPEED_DPS,
+                              label="twin-rest")
+            return {"ok": True, "move": res}
         if path == "/api/verify_report":
             import pathlib as _pl
             root = _pl.Path(__file__).resolve().parents[2]
@@ -972,7 +1154,14 @@ class _Handler(mini._Handler):
             mat = json.loads(
                 (root / "assets" / "private" / "mat_points.json")
                 .read_text(encoding="utf-8"))
-            return {"ok": True, "mat": mat}
+            try:
+                from src.vla.scene import SLOT_IDS
+                slots = [{"id": sid, "x": x, "y": y, "z": 0.0}
+                         for (x, y), sid in sorted(
+                             SLOT_IDS.items(), key=lambda kv: kv[1])]
+            except Exception:
+                slots = []
+            return {"ok": True, "mat": mat, "slots": slots}
         if path == "/api/goto":
             q = {str(k): float(v) for k, v in
                  dict(args.get("q_deg", {})).items()}
@@ -1283,6 +1472,7 @@ body[data-page="main"] #view3d { position: absolute; inset: 0;
 <label><input type="checkbox" id="vm-reach">도달범위</label>
 <label><input type="checkbox" id="vm-gt">GT</label>
 <label><input type="checkbox" id="vm-prev">이전자세</label>
+<label><input type="checkbox" id="vm-real" checked>실측겹침</label>
 <label><input type="checkbox" id="vm-dir">손목방향</label>
 <br>모델: <select id="vsrc">
 <option value="primitives">기본 도형</option>
@@ -1316,6 +1506,19 @@ Z<input id="xyz-z" size="6"> <button id="xyz-go">목표로</button><br>
 <div id="send-row">미리보기 확인 후 <button id="send-go" disabled>로봇으로 보내기</button>
 <button id="send-stop">정지</button> <span id="send-msg">대기 중</span></div>
 </details>
+<details open><summary>디지털 트윈 (실물 블록 → 가상 이미지 → VLA)</summary>
+<div class="wiz" id="wiztwin">
+<div>실물 블록을 슬롯 S1~S6에만 놓고, 색을 아래에 입력. 실물 카메라는 쓰지 않음.</div>
+<div id="twin-slots">로딩…</div>
+<div>목표 <select id="twin-target"></select>
+<button id="twin-save">색 저장</button>
+<button id="twin-run">트윈 실행</button></div>
+<div><img id="twin-img" style="max-width:100%;display:none" alt="가상 이미지"></div>
+<div id="twin-msg">대기 중</div>
+<div><button id="twin-send" disabled>유지 자세로 보내기 (저속)</button>
+<button id="twin-rest">휴식 자세로</button></div>
+</div>
+</details>
 <details><summary>데모 순서</summary>
 <div class="wiz" id="wizdemo">
 <div>호밍 확인 → 안전자세 2개 → 매트 점(아래 번호) → 원위치. 느리게, 한 단계씩 확인.</div>
@@ -1336,6 +1539,18 @@ Z<input id="xyz-z" size="6"> <button id="xyz-go">목표로</button><br>
 </details>
 <details><summary>로그</summary><div id="log"></div></details>
 </div>
+<section data-sec="cal"><h3>세션 보정 (호밍 반복 생략용)</h3>
+<div class="wiz" id="wizsess">
+<div id="sess-stat">로딩…</div>
+<div><button id="sess-flow">한 번에 보정</button>
+<button id="sess-park">주차 (저속 이동+저장)</button>
+<button id="sess-restore">주차 자세에서 복원</button></div>
+<div><button id="sess-check">확인 자세로 이동</button>
+<button id="sess-ok">맞음 (보정 확정)</button></div>
+<div id="sess-msg"></div>
+<div id="flow-steps"></div>
+</div>
+</section>
 <section data-sec="cal"><h3>호밍</h3>
 <div class="wiz" id="wizhome">
 <div>관절별 호밍. J5/J6은 표시 맞춤(현재 위치를 0으로 기록). 손목 기준 그림:</div>
@@ -2009,8 +2224,14 @@ function tick() {
         (j) => j.joint_deg !== null && j.joint_deg !== undefined)) {
       const aq = lastOv.joints.map((j) => j.joint_deg * Math.PI / 180);
       st.setSkel(st.actualLine, skelNodes(fkine(aq)));
+      st.actualLine.visible = true;
     } else {
       st.actualLine.visible = false;
+    }
+    // Encoder-readback overlay follows the 실측겹침 checkbox.
+    if (st.actualLine.visible) {
+      const cb = document.getElementById("vm-real");
+      st.actualLine.visible = cb ? !!cb.checked : true;
     }
   } catch (err) { /* overlay is best-effort */ }
   controls.update();
@@ -2580,6 +2801,30 @@ async function loadMat() {
         mb.appendChild(b);
       }
     }
+    // VLA pointing slots S1..S6 (same arm transform, cyan labels).
+    if (r.slots) {
+      const mkLabel = (text) => {
+        const c = document.createElement("canvas");
+        c.width = 128; c.height = 64;
+        const g = c.getContext("2d");
+        g.fillStyle = "rgba(0,0,0,0.65)";
+        g.fillRect(0, 0, 128, 64);
+        g.font = "bold 40px system-ui, sans-serif";
+        g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillStyle = "#7df9ff";
+        g.fillText(text, 64, 34);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: new THREE.CanvasTexture(c), depthTest: false}));
+        sp.scale.set(48, 24, 1);
+        return sp;
+      };
+      for (const s of r.slots) {
+        const sp = mkLabel(s.id);
+        sp.matrixAutoUpdate = false;
+        sp.matrix.makeTranslation(s.x, s.y, (s.z || 0) + 18);
+        st.matDots.add(sp);
+      }
+    }
     // Riser box: table (model table_z) up to the mat plane.
     const xs = MAT.points.map((p) => p.x);
     const ys = MAT.points.map((p) => p.y);
@@ -2820,6 +3065,132 @@ async function renderVerify() {
     document.getElementById("verify-table").textContent = "로드 실패";
   }
 }
+// ---- Digital twin (main page) ----
+let TWIN = {slots: {}, ids: [], colours: [], holdQ: null};
+async function initTwin() {
+  if (!document.getElementById("twin-slots")) return;
+  const r = await post("/api/twin/slots", {});
+  const box = document.getElementById("twin-slots");
+  if (!r.ok) { box.textContent = "로드 실패: " + r.error; return; }
+  TWIN.ids = r.ids; TWIN.colours = r.colours; TWIN.slots = r.slots || {};
+  let html = "<table><tr>";
+  for (const sid of TWIN.ids) {
+    html += "<td>" + sid + "<br><select data-slot='" + sid + "'>" +
+      "<option value=''>없음</option>" + TWIN.colours.map((c) =>
+        "<option value='" + c + "'" +
+        (TWIN.slots[sid] === c ? " selected" : "") + ">" + c +
+        "</option>").join("") + "</select></td>";
+  }
+  box.innerHTML = html + "</tr></table>";
+  const tgt = document.getElementById("twin-target");
+  tgt.innerHTML = TWIN.colours.map((c) =>
+    "<option value='" + c + "'>" + c + "</option>").join("");
+  document.getElementById("twin-save").onclick = async () => {
+    const rr = await post("/api/twin/slots/set",
+      {slots: readTwinSlots()});
+    document.getElementById("twin-msg").textContent =
+      rr.ok ? "색 저장됨" : "저장 실패: " + rr.error;
+  };
+  document.getElementById("twin-run").onclick = runTwin;
+  document.getElementById("twin-send").onclick = sendTwin;
+  document.getElementById("twin-rest").onclick = async () => {
+    if (!confirm("휴식 자세로 저속 이동할까요?")) return;
+    const rr = await post("/api/twin/rest", {});
+    document.getElementById("twin-msg").textContent =
+      rr.ok ? "휴식 자세 이동 완료" : "실패: " + rr.error;
+    log("트윈 휴식: " + (rr.ok ? "ok" : rr.error));
+  };
+}
+function readTwinSlots() {
+  const out = {};
+  document.querySelectorAll("[data-slot]").forEach((s) => {
+    if (s.value) out[s.dataset.slot] = s.value;
+  });
+  return out;
+}
+async function runTwin() {
+  const msg = document.getElementById("twin-msg");
+  msg.textContent = "가상 이미지 생성+VLA 추론 중…";
+  const r = await post("/api/twin/run",
+    {slots: readTwinSlots(),
+     target: document.getElementById("twin-target").value});
+  if (!r.ok) { msg.textContent = "실패: " + r.error; return; }
+  TWIN.holdQ = r.hold_q;
+  const img = document.getElementById("twin-img");
+  img.src = "data:image/png;base64," + r.png;
+  img.style.display = "";
+  msg.textContent = "정책=" + r.policy + " 목표=" + r.target +
+    " 유지=" + JSON.stringify(r.hold_q) + " " + JSON.stringify(r.rec);
+  document.getElementById("twin-send").disabled = false;
+  log("트윈 실행: 정책=" + r.policy + " 목표=" + r.target);
+}
+async function sendTwin() {
+  if (!TWIN.holdQ) return;
+  if (!confirm("유지 자세로 저속(15°/s) 이동할까요?")) return;
+  const r = await post("/api/goto",
+    {q_deg: TWIN.holdQ, speed_dps: 15, label: "twin-hold"});
+  document.getElementById("twin-msg").textContent =
+    r.ok ? "유지 자세 이동 완료, 최대오차 " +
+      r.max_abs_err.toFixed(2) + "°" : "실패(거부): " + r.error;
+  log("트윈 전송: " + (r.ok ? "ok" : r.error));
+}
+// ---- Session calibration (cal page) ----
+async function refreshSess() {
+  const box = document.getElementById("sess-stat");
+  if (!box) return;
+  const r = await post("/api/calib/session", {});
+  if (!r.ok) { box.textContent = "로드 실패: " + r.error; return; }
+  box.innerHTML = "연속성=" + r.continuity +
+    " 확정=" + (r.confirmed ? ("됨(" + r.confirmed_at + ")") : "안됨") +
+    " 저장=" + (r.saved_at || "없음") +
+    "<br>현재 가동=" + JSON.stringify(r.boot_now) +
+    "<br>저장 가동=" + JSON.stringify(r.boot_saved);
+}
+function initSess() {
+  if (!document.getElementById("sess-flow")) return;
+  refreshSess();
+  const msg = (t) => {
+    document.getElementById("sess-msg").textContent = t;
+  };
+  document.getElementById("sess-flow").onclick = async () => {
+    if (!confirm("한 번에 보정: J1~J4 센서 호밍 → 손목 → 확인자세. 진행할까요?"))
+      return;
+    const r = await post("/api/calib/flow", {});
+    const steps = (r.ok && r.steps ? r.steps : [])
+      .map((s) => s.step + "=" + s.result +
+        (s.max_abs_deg !== undefined ? "(" + s.max_abs_deg + "°)" : "") +
+        (s.note ? " " + s.note : "")).join(" / ");
+    document.getElementById("flow-steps").textContent = steps;
+    msg(r.ok ? ("흐름=" + r.flow) : ("실패: " + r.error));
+    if (r.ok && r.flow === "done")
+      msg("확인 자세로 이동됨. 3D 실측겹침을 보고 '맞음'을 누르세요.");
+    poll();
+  };
+  document.getElementById("sess-park").onclick = async () => {
+    if (!confirm("주차: 휴식 자세로 저속 이동 후 세션 저장. 진행할까요?"))
+      return;
+    const r = await post("/api/calib/park", {});
+    msg(r.ok ? "주차 저장됨(" + r.saved_at + ")" : "실패: " + r.error);
+    refreshSess(); poll();
+  };
+  document.getElementById("sess-restore").onclick = async () => {
+    const r = await post("/api/calib/restore", {});
+    msg(r.ok ? "복원됨(연속성=" + r.continuity + ")" : "실패: " + r.error);
+    poll();
+  };
+  document.getElementById("sess-check").onclick = async () => {
+    const r = await post("/api/calib/check", {});
+    msg(r.ok ? ("확인 자세 이동, 최대편차 " +
+      r.deviation.max_abs_deg + "°") : ("실패: " + r.error));
+    poll();
+  };
+  document.getElementById("sess-ok").onclick = async () => {
+    const r = await post("/api/calib/confirm", {});
+    msg(r.ok ? ("보정 확정됨(" + r.confirmed_at + ")")
+             : ("확정 불가: " + r.error));
+    refreshSess();
+  };
+}
 // Page split: cal/verify pages lack main-only controls; absorb lookups
 // with a detached element so shared handlers never throw.
 const __realById = document.getElementById.bind(document);
@@ -2835,13 +3206,14 @@ initModel().then(() => {
   if (pg === "main") {
     poll(); setInterval(poll, 2000);
     refreshRanges(); refreshPoses(); refreshConfig();
-    refreshVisual(); loadMat();
+    refreshVisual(); loadMat(); initTwin();
     fitLayout();
   } else {
     poll(); setInterval(poll, 3000);
     if (pg === "cal") {
       // M5/M6/config panels live on the cal page.
       refreshRanges(); refreshPoses(); refreshConfig();
+      initSess();
       renderHoming();
       const wrist = document.getElementById("wrist-img");
       if (wrist) {

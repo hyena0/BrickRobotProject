@@ -171,7 +171,12 @@ def open_motor(port, motor_type="medium"):
     from pybricks.parameters import Port, Stop
     if port not in OUT_LETTERS:
         raise ValueError("unknown motor port: " + str(port))
-    dev = PybricksDevMotor(getattr(Port, OUT_LETTERS[port]))
+    # reset_angle=False: keep the accumulated encoder value so the
+    # program knows where it left off (Pybricks ev3devices docs).
+    # Default True would reset every motor to its absolute marker
+    # (-180..179) at each program start and force a full recalibration.
+    dev = PybricksDevMotor(getattr(Port, OUT_LETTERS[port]),
+                           reset_angle=False)
     # Presence probe: raises OSError on an empty port so build_core
     # can report and skip it instead of crashing later mid-move.
     dev.angle()

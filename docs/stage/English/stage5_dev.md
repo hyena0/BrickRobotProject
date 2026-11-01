@@ -567,3 +567,39 @@ fails on any browser console error, checks scene via
 refreshes every frame, so waits key off #ik-stat rewrites.
 ALL PASS 2026-10-31. `dirLine` scope bug (init-local used in
 tick) fixed in the same pass.
+
+## Console split: main/calibration/verify + ghost preview (2026-10-31/11-01, no hardware)
+
+Server APIs unchanged; one template serves `/`, `/calibration`,
+`/verify` (`data-page`, per-page sections, shared transport +
+homing record, E-STOP everywhere, 127.0.0.1, no CDN). Main keeps
+only target/run/demo/joint panels; M4/M5/M6/diag/config moved to
+calibration; IK table + evidence links to verify (GT gated by
+`--private-visuals`, overlay on main only).
+Display rules: virtual-only (bricks unreachable) drives the body
+to the IK result live, send hidden; connected keeps the body on
+encoder actual and draws the IK result as a translucent (40%)
+ghost of the same model (primitives or LDraw clones), ghost
+hides on send. Line preview removed; `#preview-dist` keeps the
+client-side solution-vs-target check. Send blocks: unhomed,
+latch, disconnected, IK/range/couple fail, >45 deg confirms,
+reason beside the button; 15 deg/s.
+Diagnosis note 11-01: body not moving on drag was the preview
+flow by design, not a broken IK call (`/api/ik` converged
+0.0mm; `solveIK` wrote `pendingQ` + line only, `follow-live`
+re-pinned `qdeg` to encoders).
+Fullscreen 3D under the bar (resize handler), right 320px panel
++ bottom-left collapsed panel, display menu top-left (mat/TCP/
+gizmo/TCP-line on; reach/GT/prev/dir off). Model select +
+fit-view restored to the display menu (was buried in a collapsed
+panel); menu/panel overlap fixed left vs right, smoke-checked.
+`--offline` flag = virtual-only transport (reads fail, motion
+refused). Smoke is now two phases (connected + offline, 3 shots
+total: follow/preview/sent), homing record backed up/restored
+for a deterministic unhomed start.
+Tests: latch refusal, virtual flag, home mark/simulated, homing
+spec shape, page state sharing, offline refuse, verify report
+field contract (`id/tcp_err_mm/pass`). Full suite 366 passed,
+1 skipped; release check still FAILs on pre-existing tracked
+files only. `ui_smoke.sh` OVERALL PASS both phases 2026-11-01
+(connected 15 rows + virtual 6 rows, 0 console errors).
