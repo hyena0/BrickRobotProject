@@ -22,6 +22,7 @@ MAX_ITERS = 200
 DAMPING = 0.05
 ROT_WEIGHT = 100.0  # mm-equivalent scale for orientation rows
 STEP_MAX = 0.25  # max radians per joint per iteration
+STEP_MAX_PRISM_MM = 5.0  # max mm per prismatic joint per iteration
 
 
 def _transpose(a):
@@ -61,12 +62,25 @@ def _solve(a, b):
     return [m[i][n] for i in range(n)]
 
 
-def _chain_frames(q, axes, points):
-    """Prefix transforms and world joint frames along the chain."""
+def _chain_frames(q, axes, points, kinds=None):
+    """Prefix transforms and world joint frames along the chain.
+
+    Prismatic joints translate downstream along their (rotated) axis
+    and keep orientation; their frame column is the direction itself.
+    """
     r = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     t = [0.0, 0.0, 0.0]
     frames = []
-    for qi, w, p in zip(q, axes, points):
+    kinds = kinds or ["revolute"] * len(q)
+    for qi, w, p, kind in zip(q, axes, points, kinds):
+        if kind == "prismatic":
+            nw = mat_vec(r, w)
+            npp = [sum(r[i][j] * p[j] for j in range(3)) + t[i]
+                   for i in range(3)]
+            frames.append((nw, npp, kind))
+            t = [t[i] + sum(r[i][j] * w[j] for j in range(3)) * qi
+                 for i in range(3)]
+            continue
         k = skew(w)
         k2 = [[sum(k[i][m] * k[m][j] for m in range(3))
                for j in range(3)] for i in range(3)]
@@ -80,7 +94,7 @@ def _chain_frames(q, axes, points):
         nw = mat_vec(r, w)
         npp = [sum(r[i][j] * p[j] for j in range(3)) + t[i]
                for i in range(3)]
-        frames.append((nw, npp))
+        frames.append((nw, npp, "revolute"))
         # Compose: (R, t) <- (R, t) * (dR, pv).
         t = [sum(r[i][j] * pv[j] for j in range(3)) + t[i]
              for i in range(3)]
@@ -90,8 +104,9 @@ def _chain_frames(q, axes, points):
 
 
 def _dls_step(q, axes, points, ee, pos_t, rot_t, position_only,
-              damping=DAMPING):
-    t = fk(q, axes, points, ee)
+              damping=DAMPING, kinds=None):
+    kinds = kinds or ["revolute"] * len(q)
+    t = fk(q, axes, points, ee, kinds)
     pos = [t[0][3], t[1][3], t[2][3]]
     rot = [row[:3] for row in t[:3]]
     ep = [pos_t[i] - pos[i] for i in range(3)]
@@ -105,15 +120,20 @@ def _dls_step(q, axes, points, ee, pos_t, rot_t, position_only,
         er = [x * ROT_WEIGHT for x in _rot_log(rt)]
         e = ep + er
         rows = 6
-    frames = _chain_frames(q, axes, points)
+    frames = _chain_frames(q, axes, points, kinds)
     n = len(q)
     jcols = []
-    for w, pp in frames:
-        col = [w[1] * (pos[2] - pp[2]) - w[2] * (pos[1] - pp[1]),
-               w[2] * (pos[0] - pp[0]) - w[0] * (pos[2] - pp[2]),
-               w[0] * (pos[1] - pp[1]) - w[1] * (pos[0] - pp[0])]
-        if not position_only:
-            col += [w[i] * ROT_WEIGHT for i in range(3)]
+    for w, pp, kind in frames:
+        if kind == "prismatic":
+            col = list(w)
+            if not position_only:
+                col += [0.0, 0.0, 0.0]
+        else:
+            col = [w[1] * (pos[2] - pp[2]) - w[2] * (pos[1] - pp[1]),
+                   w[2] * (pos[0] - pp[0]) - w[0] * (pos[2] - pp[2]),
+                   w[0] * (pos[1] - pp[1]) - w[1] * (pos[0] - pp[0])]
+            if not position_only:
+                col += [w[i] * ROT_WEIGHT for i in range(3)]
         jcols.append(col)
     jt = _transpose(jcols)  # rows x n
     # A = J^T J + damping^2 I ; solve A dq = J^T e.
@@ -122,14 +142,16 @@ def _dls_step(q, axes, points, ee, pos_t, rot_t, position_only,
           for j in range(n)] for i in range(n)]
     g = [sum(jt[k][i] * e[k] for k in range(rows)) for i in range(n)]
     dq = _solve(a, g)
-    mx = max(abs(x) for x in dq) or 1.0
-    if mx > STEP_MAX:
-        dq = [x * STEP_MAX / mx for x in dq]
+    caps = [STEP_MAX_PRISM_MM if k == "prismatic" else STEP_MAX
+            for k in kinds]
+    mx = max(abs(x) / c for x, c in zip(dq, caps)) or 1.0
+    if mx > 1.0:
+        dq = [x / mx for x in dq]
     return [q[i] + dq[i] for i in range(n)], ep, e
 
 
-def _errors(q, axes, points, ee, pos_t, rot_t):
-    t = fk(q, axes, points, ee)
+def _errors(q, axes, points, ee, pos_t, rot_t, kinds=None):
+    t = fk(q, axes, points, ee, kinds)
     pos = [t[0][3], t[1][3], t[2][3]]
     rot = [row[:3] for row in t[:3]]
     pe = math.sqrt(sum((pos_t[i] - pos[i]) ** 2 for i in range(3)))
@@ -169,7 +191,9 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
        extra_starts=None) -> dict:
     """Solve IK. Target pose: mm position + 3x3 rotation matrix.
 
-    Returns {"q_deg", "success", "pos_err_mm", "rot_err_deg"}.
+    Returns {"q", "q_deg", "success", "pos_err_mm", "rot_err_deg"}.
+    "q" is native units (degrees revolute, mm prismatic); "q_deg"
+    matches "q" for revolute-only docs (backward compatible).
     Success uses the Gate 2 thresholds (5 mm / 3 deg). Seeds are
     added in batches until success or max_restarts is reached.
 
@@ -177,20 +201,23 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
     limits_deg per joint plus coupled_limits/coupled_lookup),
     seeds are drawn inside the operating ranges and
     coupled-violating solutions are rejected, so success implies
-    a limit-safe pose.
+    a limit-safe pose. Prismatic joints read limits_mm instead.
     """
     arr = joint_arrays(doc)
     axes, points = arr["axes"], arr["points"]
+    kinds = arr.get("kinds", ["revolute"] * len(axes))
     ee = ee_point(doc)
     joint_ids = arr["ids"]
     lims = arr["limits"]
     coupled = None
     lookup = None
     if limits_doc:
-        boxes = limits_doc.get("limits_deg", {})
-        lims = [[math.radians(boxes.get(jid, [-180.0, 180.0])[0]),
-                 math.radians(boxes.get(jid, [-180.0, 180.0])[1])]
-                for jid in joint_ids]
+        lims = []
+        for jid, kind in zip(joint_ids, kinds):
+            key = "limits_mm" if kind == "prismatic" else "limits_deg"
+            lo, hi = limits_doc.get(key, {}).get(jid, [-180.0, 180.0])
+            lims.append([float(lo), float(hi)] if kind == "prismatic"
+                        else [math.radians(lo), math.radians(hi)])
         coupled = limits_doc.get("coupled_limits", [])
         lookup = limits_doc.get("coupled_lookup", {})
     rng = random.Random(seed)
@@ -199,9 +226,13 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
     # the TCP sits on its axis): they are free variables that only
     # add random spins from restart seeds. Freeze them at the
     # incoming pose so a gizmo drag moves the arm, not the wrist.
+    # Prismatic columns never vanish (unit direction), so only
+    # revolute joints are considered for locking.
     locked = []
     if position_only:
-        for i, (w, p) in enumerate(zip(axes, points)):
+        for i, (w, p, kind) in enumerate(zip(axes, points, kinds)):
+            if kind == "prismatic":
+                continue
             lx, ly, lz = (ee[0] - p[0], ee[1] - p[1], ee[2] - p[2])
             cx, cy, cz = (w[1] * lz - w[2] * ly,
                           w[2] * lx - w[0] * lz,
@@ -210,16 +241,24 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
                 locked.append(i)
     seeds = []
     if q_init_deg is not None:
-        seeds.append([math.radians(x) for x in q_init_deg])
+        seeds.append([x if k == "prismatic" else math.radians(x)
+                      for x, k in zip(q_init_deg, kinds)])
     # Multi-start: extra candidate poses (safe poses, previous
     # solution) run through the same DLS; the best (min TCP error)
     # wins below. Deterministic order, no threads (GIL-bound).
     for extra in extra_starts or []:
         try:
-            seeds.append([math.radians(float(x)) for x in extra])
+            seeds.append([float(x) if k == "prismatic"
+                          else math.radians(float(x))
+                          for x, k in zip(extra, kinds)])
         except (TypeError, ValueError):
             continue
     seeds.append([0.0] * len(axes))
+    # Native-unit noise scales (radians revolute, mm prismatic).
+    near = [20.0 if k == "prismatic" else 0.35 for k in kinds]
+    kick_amp = [30.0 if k == "prismatic" else 0.5 for k in kinds]
+    fine_amp = [3.0 if k == "prismatic" else 0.05 for k in kinds]
+
     def run_seed(s, damping, iters):
         q = [min(max(v, lo), hi) for v, (lo, hi) in zip(s, lims)]
         # Locked joints stay at their own seed value (each start
@@ -228,17 +267,18 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
         for it in range(iters):
             q, ep, _ = _dls_step(q, axes, points, ee, target_pos,
                                  target_mat, position_only,
-                                 damping=damping)
+                                 damping=damping, kinds=kinds)
             q = [min(max(v, lo), hi)
                  for v, (lo, hi) in zip(q, lims)]
             for k, i in enumerate(locked):
                 q[i] = seed_hold[k]
             if it % 10 == 9 or sum(x * x for x in ep) < 1e-6:
                 pe, re = _errors(q, axes, points, ee, target_pos,
-                                 target_mat)
+                                 target_mat, kinds)
                 if pe < 0.1 and (position_only or re < 0.1):
                     break
-        pe, re = _errors(q, axes, points, ee, target_pos, target_mat)
+        pe, re = _errors(q, axes, points, ee, target_pos, target_mat,
+                         kinds)
         return ((pe, re), q, pe, re)
 
     def successful(cand) -> bool:
@@ -264,12 +304,12 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
             # Gizmo-realistic seeds: the drag starts from the current
             # pose, so also try its neighborhood (deterministic).
             if q_init_deg is not None:
-                base = [math.radians(x) for x in q_init_deg]
+                base = [x if k == "prismatic" else math.radians(x)
+                        for x, k in zip(q_init_deg, kinds)]
                 for _ in range(min(4, take)):
                     pending.append(
-                        [min(max(b + rng.uniform(-0.35, 0.35), lo),
-                             hi)
-                         for b, (lo, hi) in zip(base, lims)])
+                        [min(max(b + rng.uniform(-a, a), lo), hi)
+                         for b, (lo, hi), a in zip(base, lims, near)])
         for s in pending:
             cand = run_seed(s, DAMPING, MAX_ITERS)
             if best is None or cand[0] < best[0]:
@@ -285,7 +325,8 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
         # keep the best. Applies to position and orientation both;
         # locked joints keep their own seed value inside run_seed.
         for _ in range(6):
-            kick = [v + rng.uniform(-0.5, 0.5) for v in best[1]]
+            kick = [v + rng.uniform(-a, a)
+                    for v, a in zip(best[1], kick_amp)]
             kick = [min(max(v, lo), hi)
                     for v, (lo, hi) in zip(kick, lims)]
             for i in locked:
@@ -300,7 +341,8 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
         # escape orientation local minima near the target.
         wq = best[1]
         for k in range(4):
-            pert = [v + rng.uniform(-0.05, 0.05) for v in wq]
+            pert = [v + rng.uniform(-a, a)
+                    for v, a in zip(wq, fine_amp)]
             pert = [min(max(v, lo), hi)
                     for v, (lo, hi) in zip(pert, lims)]
             cand = run_seed(pert, DAMPING / 3.0, MAX_ITERS)
@@ -308,10 +350,44 @@ def ik(target_pos, target_mat, doc, q_init_deg=None,
                 best = cand
     (_, q, pe, re) = best
     ok = pe <= SUCCESS_POS_MM and (position_only or re <= SUCCESS_ROT_DEG)
-    q_deg = [math.degrees(x) for x in q]
-    coupled_ok = _coupled_ok(q_deg, joint_ids, coupled, lookup)
+    q_out = [x if k == "prismatic" else math.degrees(x)
+             for x, k in zip(q, kinds)]
+    coupled_ok = _coupled_ok(q_out, joint_ids, coupled, lookup)
     if (coupled or lookup) and not coupled_ok:
         ok = False
-    return {"q_deg": q_deg, "success": bool(ok),
+    return {"q": q_out, "q_deg": q_out, "success": bool(ok),
             "pos_err_mm": pe, "rot_err_deg": re,
             "coupled_ok": bool(coupled_ok)}
+
+
+def gantry_closed_form(target_pos: list[float], doc: dict) -> dict:
+    """Closed-form IK for all-prismatic (gantry) docs.
+
+    With no revolute joints the EE moves as ee0 + sum(axis_i * q_i);
+    orthonormal axes give q_i = dot(target - ee0, axis_i) directly.
+    Returns the same keys as ik() (native mm units). Raises for
+    mixed/revolute docs or non-orthonormal axes.
+    """
+    arr = joint_arrays(doc)
+    kinds = arr.get("kinds", [])
+    if not kinds or any(k != "prismatic" for k in kinds):
+        raise ValueError("gantry_closed_form needs all-prismatic docs")
+    axes = arr["axes"]
+    for i in range(len(axes)):
+        for j in range(i + 1, len(axes)):
+            dot = sum(a * b for a, b in zip(axes[i], axes[j]))
+            if abs(dot) > 1e-6:
+                raise ValueError("gantry axes must be orthonormal")
+    ee0 = ee_point(doc)
+    q = [sum((target_pos[k] - ee0[k]) * ax[k] for k in range(3))
+         for ax in axes]
+    lims = arr["limits"]
+    inside = all(lo - 1e-9 <= v <= hi + 1e-9
+                 for v, (lo, hi) in zip(q, lims))
+    qc = [min(max(v, lo), hi) for v, (lo, hi) in zip(q, lims)]
+    t = fk(qc, axes, arr["points"], ee0,
+           ["prismatic"] * len(axes))
+    pos = [t[0][3], t[1][3], t[2][3]]
+    pe = math.sqrt(sum((target_pos[i] - pos[i]) ** 2 for i in range(3)))
+    return {"q": qc, "q_deg": qc, "success": bool(inside and pe <= 5.0),
+            "pos_err_mm": pe, "rot_err_deg": 0.0, "coupled_ok": True}

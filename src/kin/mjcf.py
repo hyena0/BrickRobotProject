@@ -46,8 +46,11 @@ def build_mjcf(doc: dict) -> str:
         rel = [pt[k] - parent_pt[k] for k in range(3)]
         body = _sub(parent_el, "body", name=joint["child"],
                     pos=_fmt(rel))
-        lo, hi = joint["limits_deg"]
-        _sub(body, "joint", name=joint["id"], type="hinge",
+        kind = joint.get("type", "revolute")
+        lo, hi = (joint["limits_mm"] if kind == "prismatic"
+                  else joint["limits_deg"])
+        _sub(body, "joint", name=joint["id"],
+             type="slide" if kind == "prismatic" else "hinge",
              axis=_fmt(axis), range=f"{lo} {hi}")
         if i < len(joints) - 1:
             nxt = [float(x) for x in joints[i + 1]["point_mm"]]

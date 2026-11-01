@@ -19,13 +19,18 @@ def load_model(path: str) -> dict:
     if not joints:
         raise ValueError(f"no joints in {path}")
     for j in joints:
-        if j.get("type", "revolute") != "revolute":
-            raise ValueError(f"joint {j.get('id')}: only revolute "
-                             f"supported by this stage")
+        kind = j.get("type", "revolute")
+        if kind not in ("revolute", "prismatic"):
+            raise ValueError(f"joint {j.get('id')}: type must be "
+                             f"'revolute' or 'prismatic'")
         if len(j["axis"]) != 3 or len(j["point_mm"]) != 3:
             raise ValueError(f"joint {j.get('id')}: axis/point_mm "
                              f"need 3 numbers")
-        if len(j.get("limits_deg", [])) != 2:
+        if kind == "prismatic":
+            if len(j.get("limits_mm", [])) != 2:
+                raise ValueError(f"joint {j.get('id')}: limits_mm "
+                                 f"needs [lo, hi]")
+        elif len(j.get("limits_deg", [])) != 2:
             raise ValueError(f"joint {j.get('id')}: limits_deg "
                              f"needs [lo, hi]")
     return doc
@@ -64,14 +69,24 @@ def chain_order(doc: dict) -> list[dict]:
 
 
 def joint_arrays(doc: dict) -> dict:
-    """Axes (unit), points (mm), limits (rad) in chain order."""
+    """Axes (unit), points (mm), limits (native units) in chain order.
+
+    Limits are radians for revolute, mm for prismatic (`kinds`).
+    """
     ordered = chain_order(doc)
+    kinds = [j.get("type", "revolute") for j in ordered]
+    lims = []
+    for j, k in zip(ordered, kinds):
+        lo, hi = (j["limits_mm"] if k == "prismatic"
+                  else j["limits_deg"])
+        lims.append([float(lo), float(hi)] if k == "prismatic"
+                    else [math.radians(lo), math.radians(hi)])
     return {
         "ids": [j["id"] for j in ordered],
+        "kinds": kinds,
         "axes": [norm(j["axis"]) for j in ordered],
         "points": [[float(x) for x in j["point_mm"]] for j in ordered],
-        "limits": [[math.radians(j["limits_deg"][0]),
-                    math.radians(j["limits_deg"][1])] for j in ordered],
+        "limits": lims,
     }
 
 
