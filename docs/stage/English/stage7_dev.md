@@ -172,6 +172,39 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
    hinge pivot from a lock (documented gear_graph limitation). No code change.
 3-4. Left as-is per approval.
 
+## Div file validation — PASS (human input at MR JOS level)
+
+- Files: `MOC-85202_glaysche_Gantry_v4_div.io` (sha256 0bdb6ea2…, plain zip —
+  unlike the encrypted original) + exported `div.ldr` (sha256 ed33f41e…).
+  Both private, git-ignored. Provenance: human division, agent verification.
+- Structure: same 17 MPD blocks as original. Whole-file edge diff: exactly
+  TWO instance moves, both pure translations (R identical), root identical.
+  `top shuttle`: +932.13/+764.343/−660 LDU. `vertical axis`: +820/+438.482/+20.
+- Links (structural, disjoint, exact): base 845 + top_shuttle 53 + vertical_axis
+  68 = 966. Every part in exactly one link. Saved (private):
+  runs/stage7_tbot_t2/tbot_div_links.json.
+- Pose check: static 845 exact incl. rotations (0.0001 mm); moved 121 =
+  53+68 exactly, part-id multisets equal (no add/drop), rotations preserved.
+  No origin-shift noise. No stop needed.
+- Honest flag: static 845 is one RIGID pose, not one physical link (chain
+  loop + undisplaced carriages circulate/move within it — rigid displacement
+  cannot segment circulation). 3 rigid groups vs 3 DOF is the human's call.
+- Motors/hub: all 3×54696 + 22127 in base, one link each — matches MR JOS rule
+  (147/149→D1, 148→D2, 736/737/743→D3; ports separate, GT-blind).
+
+## Motor path proposals (agent proposal + human confirmation; user saves motor_paths)
+
+- M1 p000001 → shaft {32062, 3648b p9} → TOP cluster {10928 p31 × 3648b p39
+  × 46372 p40/p49} + BASE {11955 p63/p65} → same-shaft p65→32270 p133 VERT →
+  VERT bevel pair → candidates L_TOP / L_VERT (exact p9 shaft link unproven).
+- M2 p000002 → shaft {32062, 3648b p8} → same cluster (M1/M2 indistinguishable
+  in-graph — human must split X vs Y).
+- M3 p000003 → shaft {32062, 32269 p5 A3} → graph dead end → UNKNOWN, needs
+  human/Studio inspection.
+- Chain loop: no rigid path (circulation) → unassigned, T.3.
+- Racks (VERT p126/p127): mating pinions unidentified → T.3.
+- Regression still green (397 passed). Awaiting user motor_paths.
+
 ## T.3 re-proposal (after T.2 + approvals)
 
 - Same two extensions, tightened inputs: rack tooth lines + 3.2 mm pitch are
