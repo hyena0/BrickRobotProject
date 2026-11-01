@@ -126,3 +126,59 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
 - Guardrails: new functions only, no threshold edits, no existing-function
   rewrites; MR JOS regress must stay green (24121 slew ring must not reclassify).
   2 h box per addendum.
+
+## MR JOS path inventory (auto vs human; LOG/stage-docs/runs evidence)
+
+- Parsed model.ldr is FLAT (1 FILE block, 836 parts): MPD structure NOT used.
+  model2.ldr's ~395 FILE blocks are part definitions, not robot submodels.
+  Segmentation = HUMAN: div.io separate file, 7 displacement clusters
+  (Gate-1 fallback, LOG rows 40-41).
+- Ports = HUMAN: wiring photo → config/ports.local.yaml 11/11 (rows 42-43).
+- GT = HUMAN: gt/gt_joints.json, kinematics_gt_v2.json, eval/ground_truth
+  (rows 56, 92, 96). Catalog = tool draft + human review.
+- Joints = tools (candidates/fits/sweeps) + Spark SELECTION 3 runs temp 0
+  (row 78; clobber guard row 80); final r17 chain path = deterministic tools,
+  no Spark (row 83). C0-C6 spec + void/bracket verdicts = human (rows 81-84).
+- Ratios/coupling = mixed: J1 geometric + human triple-lock + th1 approval;
+  J2 human fallback; wrist hand re-trace; 743 break (rows 85, 87, 88).
+  Solver outputs unused. Switches th1/th2/th3 = human.
+- S4 FK/IK/eval/conventions = auto code; EE gauge + signs auto vs human GT.
+
+## Agent execution attempts (as-is, $0 spent)
+
+- joints_run: BLOCKED — missing required --stage3 (motor_paths is a hand-built
+  Stage-3 artifact; gear_graph motor_drive is a different structure, adapting
+  it would be a new hint). Fails before any API call.
+- chain_run: BLOCKED — missing required --div (MPD blocks = designer grouping,
+  excluded as hint). Fails before any API call.
+- Spark cost estimate (not executed): 1–3 select_joints calls on
+  muse-spark-1.3-contributor, temp 0 (run_selection loop); evidence table is
+  17 T-Bot candidates vs 38 for MR JOS, so smaller than the historical runs.
+  Stage-7 budget $1–3 total ($1–2 with extension); a selection loop of this
+  size is a fraction of that (order $0.1). Credentials present (2 keys).
+  Sweep tests (17, local compute) run before any API call once inputs exist.
+
+## Approved fixes
+
+1. classify() general rules — DONE (commit above): L-less axle lengths,
+   axle-pin family, cross-block connectors, non-EV3 motor (size small/medium/
+   large/None) + hub-as-brick, neutral rack wording. New-rule categories match
+   committed data 98/101 (rest: 3 deliberate human overrides). Regression:
+   NO DIFFERENCE (pytest 397). During the work an ordering bug (hub before
+   connector) was caught by the alignment check and fixed.
+2. A17 cause — INVESTIGATED ONLY: both 32270 lock to frame-fixed axles via
+   axle bores (catalog-correct: axle hole = locked), bevel mesh numerically
+   valid (27.48 vs 28.0 LDU). Locked mesh = static analysis cannot tell a
+   hinge pivot from a lock (documented gear_graph limitation). No code change.
+3-4. Left as-is per approval.
+
+## T.3 re-proposal (after T.2 + approvals)
+
+- Same two extensions, tightened inputs: rack tooth lines + 3.2 mm pitch are
+  now measured (18942: 32 teeth counted); motor shafts traced (3 × 2-part);
+  mating pinions/sprockets still unidentified — that IS the T.3 work.
+- Pre-blockers for any agent re-run: div segmentation + motor_paths report
+  (both need human/div input — same human-input points as MR JOS, not
+  automatable as-is). Spark selection loop itself is cheap (order $0.1,
+  1–3 calls) once those inputs exist.
+- Guardrails unchanged (additive only; 24121 must not reclassify; regress green).
