@@ -404,3 +404,14 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   this sandbox and bundled chromium is absent (never install per
   policy), so browser proof stays with the user smoke run.
 - File green 69 passed; regress NO DIFFERENCE; JS node --check OK.
+
+## Finishing-4e T-Bot banner + preview-400 (from tbot smoke)
+
+- Smoke result (user run): IK live=0.0 and pose-holds live=0.0 PASS —
+  the 4d snap-back fix is proven in a real browser. Two FAILs were real
+  bugs: banner showed "로봇 연결됨(가짜) T-Bot" (poll used its own latch
+  check, not robot-aware isConnected), and solveIK's /api/preview call
+  got a refused 400 that failed the zero-console-errors gate.
+- Fix: banner uses isConnected() (identical for MR JOS, virtual-only
+  for T-Bot); solveIK skips the motor preview for T-Bot (no motor map).
+- File green 69 passed; regress NO DIFFERENCE; JS node --check OK.
