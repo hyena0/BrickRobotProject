@@ -277,6 +277,19 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   mm/motor-rev uncomputable as-is (recorded gap).
 - Catalog data: linear_axis on both racks; tooth_line_offset on 18942.
   Schema accepts prismatic; assemble carries type (default revolute).
+- T-Bot generic rerun (stage7-tbot-generic): 3 selected (J1/J2 X-axes, J3
+  Z-axis) + 6 dropped, 1 attempt, consistency OK, lore-free reasons. Cost:
+  1 call. Mapping: M1(좌우/X)↔J1/J2 ambiguous (2 X-joints, 1 movement);
+  M2(상하/Z)↔J3; M3(전후/Y)↔none selected. Motor proximity vs drive-path
+  chains disagree on M3 (p5 terminal vs p000003-near-J1) — recorded, human call.
+- Prismatic joints P1/P2/P3 emitted to linear.json (links
+  base/top/vertical/plunger), schema-clean. Travel: P1 153.6 mm/rev
+  (M1 shaft-direct, port unconfirmed); P2/P3 null with gaps (no
+  motor-sprocket train; rack mates unidentified). FK/IK for prismatic:
+  kin still revolute-only — remaining block.
+- Remaining blocks: pred_C/coupling inference (no automated path); T-Bot
+  ports file; port A/B/C↔uid mapping; M1/M2↔movements split; chain loop
+  closure (25 parts off-path); plunger not rigidly segmented (by design).
 
 ## T.3 re-proposal (after T.2 + approvals)
 
