@@ -140,14 +140,27 @@
   review: false
   teeth: null
 11955.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 0
+  - 1
   axle_length: null
   category: gear
-  evidence: 'title: Technic Gear 8 Tooth Reinforced Sliding; teeth from title, kind unmeasured; T-Bot data'
-  gear_kind: null
-  holes: []
+  evidence: 'title: Technic Gear 8 Tooth Reinforced Sliding; 8T spur; axis from 8 tooth placements; teeth verified 8 in geometry; source library'
+  gear_kind: spur
+  holes:
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: axle
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
   motor: null
-  review: true
+  review: false
   teeth: 8
 14720.dat:
   axis_local:
@@ -318,31 +331,31 @@
   axis_local: null
   axle_length: null
   category: rack
-  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam Housing; T-Bot data'
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam Housing; straight rack (not curved); teeth built from boxes, 32T by 1x14 family profile and 8-LDU periodicity shared with 18942; pitch 8 LDU; source library'
   gear_kind: null
   holes: []
   motor: null
   review: true
-  teeth: null
+  teeth: 32
 18942.dat:
   axis_local: null
   axle_length: null
   category: rack
-  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam; T-Bot data'
+  evidence: 'title: Technic Gear Rack 1 x 14 with Bottom Beam; straight rack (not curved); 32 toothr placements at 8.0 LDU counted in geometry; pitch 8 LDU = 3.2 mm; source library'
   gear_kind: null
   holes: []
   motor: null
-  review: true
-  teeth: null
+  review: false
+  teeth: 32
 22127.dat:
   axis_local: null
   axle_length: null
   category: brick
-  evidence: 'title: Electric Control+ Hub; hub as brick per EV3 95646 precedent; T-Bot data'
+  evidence: 'title: Electric Control+ Hub; hub as brick per EV3 95646 precedent; bricks need no holes; source library'
   gear_kind: null
   holes: []
   motor: null
-  review: true
+  review: false
   teeth: null
 22961.dat:
   axis_local:
@@ -402,10 +415,13 @@
   review: false
   teeth: null
 24375.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 1
+  - 0
   axle_length: null
   category: pin
-  evidence: 'title: Technic Rubber Pin for Chain Tread 38; rubber implies friction; T-Bot data'
+  evidence: 'title: Technic Rubber Pin for Chain Tread 38; rubber implies friction (textual rule says frictionless); axis from child spread; source library'
   friction: true
   gear_kind: null
   holes: []
@@ -529,7 +545,7 @@
   axis_local: null
   axle_length: null
   category: pin
-  evidence: 'title: Technic Pin 3/4; T-Bot data'
+  evidence: 'title: Technic Pin 3/4; 2 children, axis unresolved (symmetric-halves vote failed); source library'
   gear_kind: null
   holes: []
   motor: null
@@ -1498,10 +1514,13 @@
   review: true
   teeth: null
 3749.dat:
-  axis_local: null
+  axis_local:
+  - 1
+  - 0
+  - 0
   axle_length: null
   category: axle
-  evidence: 'title: Technic Axle Pin; category mirrors catalogued 43093; T-Bot data'
+  evidence: 'title: Technic Axle Pin; category mirrors catalogued 43093 (textual rule says pin); axis from child spread; source library'
   gear_kind: null
   holes: []
   motor: null
@@ -1617,12 +1636,375 @@
   review: false
   teeth: null
 39794.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 0
+  - 1
   axle_length: null
   category: frame
-  evidence: 'title: Technic, Liftarm 7 x 11 Open Center Frame Thick; T-Bot data'
+  evidence: 'title: Technic, Liftarm 7 x 11 Open Center Frame Thick; 72 round holes from geometry; length axis Z; source library'
   gear_kind: null
-  holes: []
+  holes:
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 30.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 70.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 70.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 50.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -30.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 70.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -10.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 70.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -50.0
+  - kind: round
+    pos:
+    - 70.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 30.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - -110.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - -90.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - -30.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - -110.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - -90.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -90.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -30.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - -70.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -10.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -70.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - -70.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -50.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 30.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - -70.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 10.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 70.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - -70.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 50.0
+  - kind: round
+    pos:
+    - -70.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - -50.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - -30.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - -20.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - 110.0
+  - kind: round
+    pos:
+    - -40.0
+    - 0.0
+    - 90.0
+  - kind: round
+    pos:
+    - -10.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 30.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 20.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - 110.0
+  - kind: round
+    pos:
+    - 40.0
+    - 0.0
+    - 90.0
+  - kind: round
+    pos:
+    - 10.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 90.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 60.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - -60.0
+    - 0.0
+    - -100.0
   motor: null
   review: true
   teeth: null
@@ -1859,14 +2241,47 @@
   review: false
   teeth: null
 43857.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 1
+  - 0
   axle_length: null
   category: beam
-  evidence: 'title: Technic Beam 2; T-Bot data'
+  evidence: 'title: Technic Beam 2; structural, holes from geometry; source library'
   gear_kind: null
-  holes: []
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -10.0
   motor: null
-  review: true
+  review: false
   teeth: null
 44294.dat:
   axis_local:
@@ -2102,30 +2517,69 @@
   review: false
   teeth: null
 48989.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 1
+  - 0
   axle_length: null
   category: connector
-  evidence: 'title: Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins; category mirrors catalogued 32184/42003; T-Bot data'
+  evidence: 'title: Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins; category mirrors catalogued 32184/42003 (textual rule says pin); 6 round holes from geometry; source library'
   gear_kind: null
-  holes: []
+  holes:
+  - kind: round
+    pos:
+    - 10.0
+    - 20.0
+    - 0.0
+  - kind: round
+    pos:
+    - -10.0
+    - 20.0
+    - 0.0
+  - kind: round
+    pos:
+    - -10.0
+    - -20.0
+    - 0.0
+  - kind: round
+    pos:
+    - 10.0
+    - -20.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 10.0
   motor: null
   review: true
   teeth: null
 50450.dat:
-  axis_local: null
+  axis_local:
+  - 1
+  - 0
+  - 0
   axle_length: 32
   category: axle
-  evidence: 'title: Technic Axle 32; length from title; T-Bot data'
+  evidence: 'title: Technic Axle 32; single axle.dat child scaled 640 LDU along X = 32L; axis from single-primitive scale; source library'
   gear_kind: null
   holes: []
   motor: null
-  review: true
+  review: false
   teeth: null
 54696.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 1
+  - 0
   axle_length: null
   category: motor
-  evidence: 'title: Electric, Motor SPIKE Prime, Small Angular; size class small is new (EV3 code paths expect large/medium); T-Bot data'
+  evidence: 'title: Electric, Motor SPIKE Prime, Small Angular; shaft line from 2 collinear axle bores along Y (output end unconfirmed); motors skip holes per method; size class small is new (EV3 code paths expect large/medium); source library'
   gear_kind: null
   holes: []
   motor: small
@@ -2687,14 +3141,17 @@
   review: false
   teeth: null
 65249.dat:
-  axis_local: null
+  axis_local:
+  - 1
+  - 0
+  - 0
   axle_length: 2
   category: axle
-  evidence: 'title: Technic, Axle 2L with Pin without Friction Ridges Lengthwise; category mirrors catalogued 18651; T-Bot data'
+  evidence: 'title: Technic, Axle 2L with Pin without Friction Ridges Lengthwise; axle 2L; axis from symmetric sub-primitive agreement; source library'
   gear_kind: null
   holes: []
   motor: null
-  review: true
+  review: false
   teeth: null
 6536.dat:
   axis_local:
@@ -2826,24 +3283,400 @@
   review: false
   teeth: null
 71710.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 0
+  - 1
   axle_length: null
   category: beam
-  evidence: 'title: Technic, Liftarm 1 x 15 Thick, Perpendicular Holes; T-Bot data'
+  evidence: 'title: Technic, Liftarm 1 x 15 Thick, Perpendicular Holes; 43 round holes from geometry (15 main + perpendicular pairs); source library'
   gear_kind: null
-  holes: []
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 140.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 130.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 130.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 120.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -120.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -110.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -140.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -130.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -130.0
   motor: null
-  review: true
+  review: false
   teeth: null
 73507.dat:
-  axis_local: null
+  axis_local:
+  - 0
+  - 0
+  - 1
   axle_length: null
   category: beam
-  evidence: 'title: Technic, Liftarm, Modified Perpendicular Holes Thick 1 x 11; T-Bot data'
+  evidence: 'title: Technic, Liftarm, Modified Perpendicular Holes Thick 1 x 11; 31 round holes from geometry (main row + perpendicular pairs); source library'
   gear_kind: null
-  holes: []
+  holes:
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 100.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 80.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 60.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - 30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - 0.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -40.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -10.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -20.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -30.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -80.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -50.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -60.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -70.0
+  - kind: round
+    pos:
+    - 0.0
+    - 0.0
+    - -100.0
+  - kind: round
+    pos:
+    - 0.0
+    - -10.0
+    - -90.0
+  - kind: round
+    pos:
+    - 0.0
+    - 10.0
+    - -90.0
   motor: null
-  review: true
+  review: false
   teeth: null
 87082.dat:
   axis_local:
