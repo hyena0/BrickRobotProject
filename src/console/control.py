@@ -25,8 +25,9 @@ transport. This screen adds, on top of mini:
 - Visual source switch: primitives (default) or LDraw link meshes.
   /api/visual returns link id -> mesh url only; the page poses each
   mesh with F_i (identity link frame). LDraw .glb files live in
-  git-ignored assets/private/visual_pack/ROBOT/ and are served only
-  with --private-visuals ROBOT (same-origin page, no-store).
+  git-ignored assets/private/visual_pack/ROBOT/ and are served
+  (same-origin page, no-store) for the matching robot: explicit
+  --private-visuals ROBOT, else the robot's pack auto-detected.
 
 Direction confirmations live in ``config/direction.local.json``
 (absent = unconfirmed). A reversed verdict flips the ratio sign via
@@ -56,6 +57,41 @@ MAX_UNCONFIRMED_JOG_DEG = 5.0
 
 # Console robot selection (additive; default MR JOS behavior unchanged).
 ROBOT_IDS = ("mrjos", "tbot")
+
+# Visual pack dir per robot (private, git-ignored LDraw meshes).
+ROBOT_PACKS = {"mrjos": "robot_inferred", "tbot": "tbot"}
+
+
+def _pack_has_meshes(root, name):
+    d = (pathlib.Path(root) / "assets" / "private" / "visual_pack"
+         / name)
+    return d.is_dir() and bool(list(d.glob("D*.glb")))
+
+
+def resolve_visual_pack(explicit, robot, root=None):
+    """Which visual pack dir to serve, or None for primitives-only.
+
+    An explicit --private-visuals keeps legacy behavior (served
+    blindly, per-file 404). Otherwise the robot's pack dir is
+    auto-detected when it holds D*.glb files, so LDraw just works
+    without flags. Loopback-only serving, no-store, never in git:
+    the privacy posture is unchanged.
+    """
+    if root is None:
+        root = pathlib.Path(__file__).resolve().parents[2]
+    if explicit and explicit == ROBOT_PACKS.get(robot):
+        return explicit
+    auto = ROBOT_PACKS.get(robot)
+    if auto and _pack_has_meshes(root, auto):
+        return auto
+    return None
+
+
+def visual_pack_for(handler):
+    """Resolved pack for this handler's robot (flag or auto)."""
+    return resolve_visual_pack(getattr(handler, "private_visuals",
+                                       None),
+                               getattr(handler, "robot", "mrjos"))
 
 
 def robot_files(robot):
@@ -922,9 +958,11 @@ class _Handler(mini._Handler):
     private_visuals = None
 
     def _serve_private(self, path):
-        # Private LDraw-derived meshes: only with --private-visuals,
-        # only same-origin page loads, never cached, never in git.
-        if not self.private_visuals:
+        # Private LDraw-derived meshes: resolved pack only (explicit
+        # flag or per-robot auto-detect), only same-origin page loads,
+        # never cached, never in git.
+        allowed = visual_pack_for(self)
+        if not allowed:
             self._send_json({"ok": False, "error": "not found"}, 404)
             return
         rel = path[len("/private/visual/"):]
@@ -934,6 +972,9 @@ class _Handler(mini._Handler):
             self._send_json({"ok": False, "error": "not found"}, 404)
             return
         robot, name = parts
+        if robot != allowed:
+            self._send_json({"ok": False, "error": "not found"}, 404)
+            return
         if not (name.endswith(".glb") or name == "manifest.json"):
             self._send_json({"ok": False, "error": "not found"}, 404)
             return
@@ -1376,14 +1417,15 @@ class _Handler(mini._Handler):
             # implicit (identity link frame posed by F_i in-page).
             available = ["primitives"]
             links = {}
-            if self.private_visuals:
+            pack = visual_pack_for(self)
+            if pack:
                 from src.kin.model import chain_order
 
                 n = len(chain_order(self.model_doc)) + 1
                 for i in range(n):
                     lid = "D" + str(i)
                     links[lid] = ("/private/visual/"
-                                   + self.private_visuals + "/"
+                                   + pack + "/"
                                    + lid + ".glb")
                 available.append("ldraw")
             return {"ok": True, "available": available, "links": links}
@@ -1515,7 +1557,8 @@ def main(argv=None) -> None:
                              "(default: fake bricks)")
     parser.add_argument("--private-visuals", default=None, metavar="ROBOT",
                         help="serve git-ignored LDraw meshes from "
-                             "assets/private/visual_pack/ROBOT")
+                             "assets/private/visual_pack/ROBOT "
+                             "(default: auto-detect the robot's pack)")
     parser.add_argument("--offline", action="store_true",
                         help="virtual-only: no bricks answer "
                              "(body follows IK, send hidden)")
@@ -2119,7 +2162,7 @@ async function refreshVisual() {
   sel.options[1].disabled = !ldraw;
   if (ldraw) MESHES.urls = r.links;
   document.getElementById("vmsg").textContent = ldraw ?
-    "" : "LDraw 메시 없음: --private-visuals ROBOT 필요";
+    "" : "LDraw 메시 없음(기본 도형 유지)";
 }
 function applyVis() {
   const prim = VSRC === "primitives";

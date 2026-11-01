@@ -329,11 +329,53 @@ def test_ik_position_only_reaches_ee(handler, tmp_path, monkeypatch):
     assert res["joints"] == ["J1", "J2", "J3", "J4", "J5", "J6"]
 
 
-def test_visual_primitives_only(handler):
+def test_visual_primitives_only(handler, monkeypatch):
+    monkeypatch.setattr(ctl, "_pack_has_meshes", lambda root, name: False)
     status, res = handler.dispatch_api("/api/visual", {})
     assert status == 200
     assert res["available"] == ["primitives"]
     assert res["links"] == {}
+
+
+def _make_pack(root, name, lids):
+    d = pathlib.Path(root) / "assets" / "private" / "visual_pack" / name
+    d.mkdir(parents=True)
+    for lid in lids:
+        (d / (lid + ".glb")).write_bytes(b"GLB")
+
+
+def test_resolve_visual_pack_explicit_wins(tmp_path):
+    # Explicit matching flag is served blindly (legacy, per-file 404).
+    assert ctl.resolve_visual_pack("robot_inferred", "mrjos",
+                                    root=tmp_path) == "robot_inferred"
+    # A mismatched explicit flag falls back to the robot's auto pack.
+    _make_pack(tmp_path, "robot_inferred", ["D0"])
+    assert ctl.resolve_visual_pack("other", "mrjos",
+                                    root=tmp_path) == "robot_inferred"
+    assert ctl.resolve_visual_pack("other", "tbot",
+                                    root=tmp_path) is None
+
+
+def test_resolve_visual_pack_auto_detects(tmp_path):
+    assert ctl.resolve_visual_pack(None, "mrjos",
+                                    root=tmp_path) is None
+    _make_pack(tmp_path, "robot_inferred", ["D0"])
+    assert ctl.resolve_visual_pack(None, "mrjos",
+                                    root=tmp_path) == "robot_inferred"
+    assert ctl.resolve_visual_pack(None, "tbot",
+                                    root=tmp_path) is None
+    _make_pack(tmp_path, "tbot", ["D0"])
+    assert ctl.resolve_visual_pack(None, "tbot",
+                                    root=tmp_path) == "tbot"
+
+
+def test_visual_auto_advertises_detected_pack(handler, monkeypatch):
+    monkeypatch.setattr(ctl, "_pack_has_meshes",
+                        lambda root, name: True)
+    status, res = handler.dispatch_api("/api/visual", {})
+    assert status == 200
+    assert res["available"] == ["primitives", "ldraw"]
+    assert len(res["links"]) == 7
 
 
 def test_visual_private_links(handler):
@@ -636,12 +678,15 @@ def test_tbot_mode_virtual_and_motion_blocked(handler):
         assert status == 400 and "virtual-only" in res["error"]
 
 
-def test_visual_link_count_follows_chain(handler):
+def test_visual_link_count_follows_chain(handler, monkeypatch):
     _gantry_handler(handler)
-    handler.private_visuals = "somepack"
+    monkeypatch.setattr(ctl, "_pack_has_meshes",
+                        lambda root, name: True)
     status, res = handler.dispatch_api("/api/visual", {})
     assert status == 200
     assert sorted(res["links"]) == ["D0", "D1", "D2", "D3"]
+    assert all(v.endswith("/tbot/" + k + ".glb")
+               for k, v in res["links"].items())
 
 
 def test_console_js_has_no_hardcoded_joint_counts():
