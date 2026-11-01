@@ -223,11 +223,21 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
 
 - gear_graph with div link_of: 20 nodes, 4 edges, M1+M2→A19, M3→A3 (was A18
   without links). intra still 1 (bevel pair).
-- joints_run launched (run-id stage7-tbot-joints, assembled poses + catalog +
-  motor_paths terminals). Awaiting Spark selection + consistency verdict.
+- joints_run DONE (run-id stage7-tbot-joints): 1 attempt, 1 Spark call,
+  6 selected + 6 dropped + 5 rejected, consistency OK. Drive gaps recorded
+  (J1/J2/J5/J6 motor-less; G73 chain unreached; EE G177 unconnected).
+  All 6 selected are REVOLUTE (schema has no prismatic); positions z=290–500.
+  Cost: 1 call, 17-row table (within the order-$0.1 estimate).
+- PROMPT BIAS FOUND (not fixed): joints_spark PROMPT hardcodes MR JOS
+  knowledge ("J2 user-confirmed 149-driven", "J1 slew", "differentially
+  coupled wrist", "typically 6 joints", "fewer than 4 is under-selection").
+  T-Bot reasons parrot it (149, slew, wrist). Selection pushed toward 6
+  joints for a 3-movement robot. Approval item: generalize the prompt
+  (per-model gap input or drop the paragraph).
 - build_topology: NOT run by design (needs div joints + injects MR JOS RING140
   virtual gear — running it on T-Bot would be model contamination).
-- assemble: pending joints doc; coupling (pred_C) absent for T-Bot — expect block.
+- assemble: attempted, BLOCKED — FileNotFoundError pred_C_tbot.json (no
+  coupling inference path as-is) and no T-Bot ports file. Exact errors kept.
 
 ## T.3 re-proposal (after T.2 + approvals)
 
