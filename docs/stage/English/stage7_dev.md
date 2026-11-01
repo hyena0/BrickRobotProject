@@ -432,3 +432,18 @@ stay under `assets/private/` (git-ignored), no Modal uploads. Nothing uploaded.
   and eyeballed (red rack rides blue vertical, red plunger moves alone).
 - No source-code change, so no regress run (pipeline untouched); pack
   AABB check + manifest + renders are the verification.
+
+## Finishing-1b plunger narrowed to 2-part mover (bugs/plunger_1,2.png)
+
+- Human correction: only gray rack 18942 p000127 + red axle 32062
+  p000128 move front-back; everything else (incl. plunger head/frame)
+  stays with vertical. Previous 45-part D3 wrongly slid as one block.
+- Applied: D3 = {p000127, p000128} (2 parts, 3,524 tris); D2 = 66
+  (rails + red rack 18940 + head). Totals 845+53+66+2=966.
+- Drive reading: gray rack slides on fixed red-rack guide, driven by
+  fixed 8T pinion 10928 p000090 (now back in D2); P3 limits +-47.2 keep
+  the rack meshed (span 102.4 minus pinion dia 8, symmetric assumption).
+- Pack rebuilt + refit (AABB green); renders re-done and eyeballed
+  (slim rack+axle separates from the blue head in posed frame).
+- No source-code change, so no regress run; verification is the builder
+  AABB check + manifest + renders.
