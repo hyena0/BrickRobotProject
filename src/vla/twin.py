@@ -118,10 +118,13 @@ def run_twin(slot_colours: dict, target: str,
             out = LI.predict_chunk(
                 ckpt, img, rest,
                 f"Point to the {target} block.")
+            assert len(out["actions"]) == 50, out.get("n_steps")
             hold_q = [float(v) for v in out["actions"][-1]]
             policy = "vla"
             rec = {"status": "pass", "load_s": out["load_s"],
-                   "infer_s": out["infer_s"]}
+                   "infer_s": out["infer_s"],
+                   "state_source": out.get("state_source"),
+                   "n_steps": out.get("n_steps")}
         except RuntimeError:
             pass
     if hold_q is None:

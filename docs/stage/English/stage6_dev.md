@@ -126,3 +126,40 @@
   `summarize_sens` verdict.
 - Spare-day plan written separately (no implementation):
   `docs/stage/Korean/stage6_physical_plan.ko.md`.
+
+## 9B fine-tune + eval-ft (2026-11-02)
+- Dataset `runs/stage9/lerobot9b-20261102-215745`: 400 virtual + 900
+  real (15 train batches x ~3 colours x20 repeats) = 1300 eps, h264.
+- Non-leakage: sha256 of the 5 test photos vs all 65,000 training
+  frames = 0 exact matches (nearest aHash 2-5/64 bits).
+- eval-ft (fixed 50-action drain): real test 0/15 -> **15/15** at
+  4.1 mm mean error; virtual 43% -> **46%**. Conditions: fixed
+  overlay-aligned camera, 6 slots, 3 physical colours, same tray setup.
+- Follow-up: 5 extra batches (different lighting) as `holdout` split,
+  never training; score with `stage9_eval_real.py --splits holdout`.
+
+## 9B wrap-up (2026-11-03, no further training)
+- Final table: virtual 100 scenes 43% -> 46%; real same setup 15:
+  0/15 Modal, 1/15 local -> 15/15 (4.1 mm); real new lighting 14:
+  3/14 -> 3/14; random baseline 0% virt, 33% real (chance) -> same.
+  The one-sample Modal/local gap is flow-matching sampling noise
+  (batch 12 green). Full rows: runs/stage9/eval_real_local_test.json
+  (holdout file pending the pasted output).
+- Conditions: ckpts before
+  `/data/train-20261031-203906/checkpoints/006000/pretrained_model`
+  (= local `runs/vla/ckpt`), after
+  `/data/ft9b-20261102-132927/checkpoints/003000/pretrained_model`;
+  code at `ca87c7d` (dirty tree); eval-ft 2026-11-02, local evals
+  2026-11-03 session; camera fixed (pos [-133,-60,550],
+  look [-133,235,0], fov 22, 256px, center-square crop, yaml
+  unchanged); photos train 15 batches (45), test 5 (15), holdout
+  21-25 (14, lighting slightly changed).
+- Full rows: `runs/stage9/eval_real_local_test.json`,
+  `runs/stage9/eval_real_local_holdout.json`.
+- Conclusion: local and Modal evals agree. Same setup improved
+  0/15 -> 15/15, but new lighting gives 3/14, same as before
+  fine-tuning. A small real dataset only fits its shooting setup;
+  varied-setup data is the next task.
+- Preservation: do NOT delete `runs/vla/ckpt`,
+  `runs/vla/ckpt-ft9b`, Volume `train-20261031-203906`,
+  `ft9b-20261102-132927`.

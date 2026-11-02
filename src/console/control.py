@@ -155,7 +155,8 @@ def select_robot(handler, robot):
 TBOT_BLOCKED = frozenset({
     "/api/jog", "/api/jogmap/set", "/api/jogmap/reset",
     "/api/jogmap/delete", "/api/markzero", "/api/home", "/api/diag",
-    "/api/goto", "/api/preview", "/api/home_joint", "/api/direction",
+    "/api/goto", "/api/preview", "/api/home_joint", "/api/home_all",
+    "/api/direction",
     "/api/pose", "/api/range",
     "/api/calib/park", "/api/calib/restore", "/api/calib/check",
     "/api/calib/confirm", "/api/calib/flow",
@@ -794,11 +795,51 @@ def write_homing_result(joint, status, offset, note=""):
     return record
 
 
+def mark_zero(handler, joints):
+    """Record current positions as zero in one encoder snapshot.
+
+    Offsets are chosen so the coupled readback is exactly 0, which
+    keeps the wrist cross terms (J4/J5/J6) exact. Joints without a
+    live encoder reading are refused, not guessed.
+    """
+    enc = {}
+    for brick in handler.transport.bricks:
+        try:
+            enc.update(
+                {(brick, port): motor for port, motor in
+                 handler.transport.send(brick, "read")
+                 ["encoders"].items()})
+        except Exception:
+            pass
+    try:
+        raw = mini.coupled_joint_readback(
+            enc, handler.jog_map, {}) or {}
+    except KeyError:
+        raw = {}
+    offsets = {}
+    for jid in joints:
+        if jid not in handler.jog_map:
+            raise ValueError("unknown joint: " + str(jid))
+        r = raw.get(jid)
+        if r is None:
+            entry = handler.jog_map[jid]
+            m = enc.get((entry["brick"], entry["port"]))
+            if m is None:
+                raise ValueError("no encoder reading for "
+                                 + str(jid))
+            r = float(entry["ratio"]) * float(m)
+        offset = -float(r)
+        write_homing_result(jid, "homed", offset,
+                            "manual mark at %.1f deg" % float(r))
+        offsets[jid] = offset
+    return offsets
+
+
 def home_joint(handler, joint, mark=False):
     """Home one joint: sensor run (real) or simulated (fake bricks).
 
     Manual joints (J5/J6): mark=True records the current position
-    as zero (offset = -ratio * motor_pos).
+    as zero via :func:`mark_zero`.
     """
     spec = homing_spec().get(joint, {}) or {}
     method = spec.get("method", "manual")
@@ -808,28 +849,9 @@ def home_joint(handler, joint, mark=False):
     record = latest_homing_record()
     offsets = record.get("offsets", {}) or {}
     if method == "manual" or mark:
-        enc = {}
-        for brick in handler.transport.bricks:
-            try:
-                enc.update(
-                    {(brick, port): motor for port, motor in
-                     handler.transport.send(brick, "read")
-                     ["encoders"].items()})
-            except Exception:
-                pass
-        raw = mini.coupled_joint_readback(
-            enc, handler.jog_map, {}) or {}
-        cur = float(raw.get(joint, 0.0))
-        offset = -float(entry["ratio"]) * float(
-            enc.get((entry["brick"], entry["port"]), 0.0) or 0.0)
-        if cur == 0.0:
-            # No readback (no record yet): fall back to motor raw.
-            offset = -float(entry["ratio"]) * float(
-                enc.get((entry["brick"], entry["port"]), 0.0) or 0.0)
-        write_homing_result(joint, "homed", offset,
-                            "manual mark at %.1f deg" % cur)
+        offsets = mark_zero(handler, [joint])
         return {"ok": True, "joint": joint, "method": "manual",
-                "offset": offset}
+                "offset": offsets[joint]}
     if getattr(handler, "virtual", False):
         offset = offsets.get(joint, 0.0)
         write_homing_result(joint, "homed", offset, "simulated")
@@ -1170,24 +1192,46 @@ class _Handler(mini._Handler):
         if path == "/api/mode":
             # virtual: fake bricks (send allowed for demo).
             # connected: both bricks answer reads.
+            # identity/motors/missing/sw_version come from the brick
+            # read snapshot, so a wrong or stale brick copy is
+            # visible here (which config it runs, which ports it
+            # knows, which devices are unplugged).
             bricks = {}
+            identity = {}
+            motors = {}
+            missing = {}
+            sw_version = {}
             for brick in self.transport.bricks:
                 try:
-                    self.transport.send(brick, "read")
+                    state = self.transport.send(brick, "read")
                     bricks[brick] = True
+                    state = state or {}
+                    identity[brick] = state.get("brick", brick)
+                    motors[brick] = sorted(
+                        (state.get("encoders") or {}).keys())
+                    missing[brick] = list(state.get("missing") or [])
+                    if state.get("sw_version"):
+                        sw_version[brick] = state.get("sw_version")
                 except Exception:
                     bricks[brick] = False
             connected = bool(bricks) and all(bricks.values())
             if getattr(self, "robot", "mrjos") == "tbot":
                 # Virtual-only: never report brick connection.
                 return {"ok": True, "robot": "tbot", "virtual": True,
-                        "connected": False, "bricks": {}}
+                        "connected": False, "bricks": {},
+                        "identity": {}, "motors": {}, "missing": {},
+                        "sw_version": {}}
             return {"ok": True,
                     "virtual": bool(getattr(self, "virtual", False)),
-                    "connected": connected, "bricks": bricks}
+                    "connected": connected, "bricks": bricks,
+                    "identity": identity, "motors": motors,
+                    "missing": missing, "sw_version": sw_version}
         if path == "/api/home_joint":
             return home_joint(self, str(args.get("joint", "")),
                               mark=bool(args.get("mark", False)))
+        if path == "/api/home_all":
+            return {"ok": True,
+                    "offsets": mark_zero(self, list(self.jog_map))}
         if path == "/api/homing_spec":
             return {"ok": True, "joints": homing_spec()}
         if path == "/api/calib/session":
@@ -1739,6 +1783,8 @@ Z<input id="xyz-z" size="6"> <button id="xyz-go">목표로</button><br>
 <div>관절별 호밍. J5/J6은 표시 맞춤(현재 위치를 0으로 기록). 손목 기준 그림:</div>
 <div><img id="wrist-img" style="max-width:100%;display:none" alt="손목 기준"></div>
 <div id="home-rows">로딩…</div>
+<div><button id="home-all">전부 0으로</button>
+<span id="home-all-msg"></span></div>
 <div id="home-msg"></div>
 <div><a href="/">메인으로 돌아가기</a></div>
 </div>
@@ -1901,15 +1947,17 @@ async function initModel() {
       metalness: 0.35}));
   const jointMat = new THREE.MeshStandardMaterial({color: 0x3a7bd5,
     roughness: 0.45, metalness: 0.3});
-  // Initial pose: runs/stage5/poses10.json pose01, the io render
-  // reference (assembled robot, not the flat zero pose).
-  const POSE01 = {J1: 6.595, J2: 138.148, J3: 92.007,
-                  J4: 79.832, J5: -63.112, J6: -45.08};
+  // Initial pose: the park/rest pose (mirrors
+  // src/console/calib_session.py PARK_Q_DEG), a verified ㄱ shape
+  // with the TCP well above the table. poses10 pose01 put the
+  // initial IK target ~190 mm UNDER the table (bugs/basic_bottom).
+  const PARK_Q = {J1: 25.58, J2: 20.93, J3: 17.17,
+                  J4: -43.58, J5: -87.46, J6: 60.0};
   // Rigid links: link i is fixed in its own PoE frame F_i, so its
   // capsule endpoints (joint anchors at the zero pose) are constant
   // in that frame and the mesh just takes F_i each tick. The anchor
   // p_i lies on screw axis i, hence F_i^-1 F_{i-1} p_i == p_i.
-  const q0 = m.joints.map((j) => qNative(j.id, POSE01[j.id] || 0));
+  const q0 = m.joints.map((j) => qNative(j.id, PARK_Q[j.id] || 0));
   const F0pose = fkine(q0);
   const e0 = MODEL.ee_mm;
   for (let i = 0; i < m.joints.length; i++) {
@@ -1974,7 +2022,7 @@ async function initModel() {
   for (const j of m.joints) {
     const o = document.createElement("option");
     o.textContent = j.id; jsel.appendChild(o);
-    qdeg[j.id] = (j.id in POSE01) ? POSE01[j.id] : 0;
+    qdeg[j.id] = (j.id in PARK_Q) ? PARK_Q[j.id] : 0;
   }
   // IK target gizmo (world frame): drag it, the skeleton follows.
   const tc = new TransformControls(camera, renderer.domElement);
@@ -2086,9 +2134,9 @@ async function initModel() {
 let ghostOn = false;
 const GHOST = {prims: [], nodes: [], base: null, ldraw: []};
 function applyGhost() {
-  const prim = VSRC === "primitives";
-  const showP = ghostOn && prim;
-  const showL = ghostOn && !prim && MESHES.ready;
+  const showMesh = VSRC === "ldraw" && MESHES.ready;
+  const showP = ghostOn && !showMesh;
+  const showL = ghostOn && showMesh;
   for (const g of GHOST.prims) g.mesh.visible = showP;
   for (const g of GHOST.nodes) g.mesh.visible = showP;
   if (GHOST.base) GHOST.base.visible = showP;
@@ -2165,15 +2213,19 @@ async function refreshVisual() {
     "" : "LDraw 메시 없음(기본 도형 유지)";
 }
 function applyVis() {
-  const prim = VSRC === "primitives";
+  // Keep the primitives until LDraw meshes are actually ready:
+  // switching the visual must never leave an empty stage during
+  // the pack load (bugs/MR_jos_hw_disappear).
+  const showMesh = VSRC === "ldraw" && MESHES.ready;
+  const prim = !showMesh;
   for (const g of SEGS) g.mesh.visible = prim;
   for (const b of NODES) b.visible = prim;
   const st = window._scene;
   if (st.baseMesh) st.baseMesh.visible = prim;
   if (st.eeAxes) st.eeAxes.visible = prim;
-  for (const g of MESHES.groups) g.visible = !prim;
+  for (const g of MESHES.groups) if (g) g.visible = showMesh;
   document.getElementById("vsrc-name").textContent =
-    prim ? "기본 도형" : "LDraw 메시";
+    VSRC === "primitives" ? "기본 도형" : "LDraw 메시";
   applyGhost();
 }
 async function loadMeshes() {
@@ -2192,6 +2244,7 @@ async function loadMeshes() {
     return;
   }
   const loader = new GLTFLoader();
+  document.getElementById("vmsg").textContent = "LDraw 메시 로딩 중…";
   // Link ids come from /api/visual (D0..D6 MR JOS, D0..D3 T-Bot):
   // never a hardcoded 7-link list.
   const ids = Object.keys(MESHES.urls);
@@ -2215,6 +2268,7 @@ async function loadMeshes() {
         MESHES.ready = true;
         window._scene.meshGroups = MESHES.groups;
         buildGhostLdraw();
+        document.getElementById("vmsg").textContent = "";
         applyVis();
         log("LDraw 메시 로드 완료");
       }
@@ -2393,10 +2447,11 @@ function tick() {
   }
   window._scene.eeAxes.matrix.copy(F[F.length - 1]);
   window._scene.eeAxes.matrixWorldNeedsUpdate = true;
-  if (VSRC === "ldraw" && MESHES.ready) {
+  if (VSRC === "ldraw" && MESHES.ready && MESHES.groups[0]) {
     MESHES.groups[0].matrix.identity();
     MESHES.groups[0].matrixWorldNeedsUpdate = true;
     for (let i = 1; i <= MODEL.joints.length; i++) {
+      if (!MESHES.groups[i]) continue;
       MESHES.groups[i].matrix.copy(F[i - 1]);
       MESHES.groups[i].matrixWorldNeedsUpdate = true;
     }
@@ -2550,6 +2605,7 @@ async function poll() {
     try {
       const md = await post("/api/mode", {});
       if (md.ok) VIRT = !!md.virtual;
+      window._lastMode = md;
     } catch (err) { /* keep last VIRT */ }
     // isConnected() is robot-aware (T-Bot virtual-only never connects);
     // identical to the latch check for MR JOS.
@@ -2557,6 +2613,28 @@ async function poll() {
     el("mode", (conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
                     : "가상만(브릭 미연결)") +
       (ROBOT === "tbot" ? " T-Bot" : ""), conn ? "ok" : "bad");
+    // Status-change record: connection, latch, per-joint
+    // homed/read state. Baseline once, then only on change, so
+    // every transition stays in the log without a line per poll.
+    const stOk = !!conn;
+    const stLatch = !!(L === true || R === true);
+    const stJoints = (o.joints || []).map((j) =>
+      j.joint + "=" + (j.joint_deg === null || j.joint_deg === undefined
+        ? "읽김" : Number(j.joint_deg).toFixed(1)) + "/" +
+      (j.homed ? "완" : "미")).join(" ");
+    const stSig = (stOk ? "1" : "0") + (stLatch ? "1" : "0") +
+      (o.joints || []).map((j) =>
+        (j.homed ? "1" : "0") +
+        ((j.joint_deg === null || j.joint_deg === undefined) ? "0" : "1")
+      ).join("");
+    if (window._lastStSig === undefined) {
+      log("상태기준 연결=" + (stOk ? "ok" : "bad") +
+        " 래치=" + (stLatch ? "걸림" : "없음") + " " + stJoints);
+    } else if (window._lastStSig !== stSig) {
+      log("상태변경 연결=" + (stOk ? "ok" : "bad") +
+        " 래치=" + (stLatch ? "걸림" : "없음") + " " + stJoints);
+    }
+    window._lastStSig = stSig;
     const dg = document.getElementById("diag");
     if (dg) {
       let dh = "<table><tr><th>관절</th><th>브릭/포트</th>" +
@@ -2573,7 +2651,27 @@ async function poll() {
            j.sensor + ":" + JSON.stringify(j.sensor_state)) +
           "</td><td>" + (latched ? "걸림" : "없음") + "</td></tr>";
       }
-      dg.innerHTML = dh + "</table>";
+      // Brick inventory: which copy each brick runs, which motor
+      // ports it knows, which devices are unplugged, and its SW
+      // version. A stale or wrong-side brick copy shows up here.
+      let brickInv = "";
+      try {
+        const md = window._lastMode;
+        const mid = (md && md.ok && md.identity) || {};
+        const mmo = (md && md.ok && md.motors) || {};
+        const mmi = (md && md.ok && md.missing) || {};
+        const msw = (md && md.ok && md.sw_version) || {};
+        brickInv = Object.keys(mid).map((b) =>
+          b + "=" + mid[b] +
+          "[모터 " + (mmo[b] || []).join(",") + "]" +
+          (msw[b] ? "[v" + msw[b] + "]" : "[버전읽김]") +
+          (((mmi[b] || []).length)
+            ? "[<b>미연결:" + mmi[b].join(",") + "</b>]" : "")
+        ).join(" / ");
+      } catch (err) { brickInv = ""; }
+      dg.innerHTML = (brickInv
+        ? "<div>브릭 식별: " + brickInv + "</div>" : "") +
+        dh + "</table>";
     }
     refreshSend();
   } catch (e) {
@@ -2614,11 +2712,26 @@ document.getElementById("w4-rev").onclick = async () => {
     r.ok ? j + " 반대 → 부호 뒤집어 저장됨(비율 " + r.ratio + ")" : "실패: " + r.error;
   log("M4 " + j + " reversed: " + (r.ok ? "비율 " + r.ratio : r.error));
 };
+function statusCtx() {
+  if (!lastOv) return "상태수신전";
+  const L = lastOv.latched.left, R = lastOv.latched.right;
+  const lr = "좌:" + (L === null ? "끊김" : (L ? "래치" : "연결")) +
+    " 우:" + (R === null ? "끊김" : (R ? "래치" : "연결"));
+  const js = (lastOv.joints || []).map((j) =>
+    j.joint + "=" + (j.joint_deg === null || j.joint_deg === undefined
+      ? "읽김" : Number(j.joint_deg).toFixed(1))).join(" ");
+  return lr + " " + js;
+}
 function log(msg) {
   const el = document.getElementById("log");
   if (!el) return;
   const d = document.createElement("div");
-  d.textContent = new Date().toLocaleTimeString() + " " + msg;
+  // Every line carries live left/right + joint context so a failure
+  // line alone shows the cause; status lines already carry it.
+  const ctx = (msg.indexOf("상태기준") === 0 ||
+               msg.indexOf("상태변경") === 0)
+    ? "" : " [" + statusCtx() + "]";
+  d.textContent = new Date().toLocaleTimeString() + " " + msg + ctx;
   el.prepend(d);
   while (el.children.length > 50) el.lastChild.remove();
 }
@@ -2904,13 +3017,16 @@ function isConnected() {
   return !!(lastOv && (Date.now() - lastOk < 6000) &&
     lastOv.latched.left !== null && lastOv.latched.right !== null);
 }
+function unhomedJoints() {
+  // Calibration-independent testing: unhomed joints warn, never block.
+  if (!lastOv || !lastOv.joints) return [];
+  return lastOv.joints.filter((j) => !j.homed).map((j) => j.joint);
+}
 function sendBlockReason() {
   if (!lastOv) return "상태 수신 중";
   if (!isConnected()) return "브릭 미연결(가상만)";
   const L = lastOv.latched.left, R = lastOv.latched.right;
   if (L === true || R === true) return "래치 걸림(해제 필요)";
-  if (lastOv.joints.some((j) => !j.homed))
-    return "호밍 안 됨(보정 페이지)";
   if (!pendingQ || !previewOk) return "유효한 미리보기 없음";
   if (previewRange && previewRange !== "ok")
     return "범위 위반: " + previewRange;
@@ -2923,13 +3039,22 @@ function refreshSend() {
   if (row) row.style.display = isConnected() ? "" : "none";
   const reason = sendBlockReason();
   if (btn) btn.disabled = !!reason;
-  if (msg) msg.textContent =
-    reason || ("보내기 가능 (저속 " + SEND_SPEED_DPS + "°/s)");
+  const unhomed = unhomedJoints();
+  if (msg) msg.textContent = reason ||
+    (unhomed.length ? "경고: 호밍 미완료(" + unhomed.join(",") +
+      ") — 클릭 시 확인 후 전송 (저속 " + SEND_SPEED_DPS + "°/s)"
+      : ("보내기 가능 (저속 " + SEND_SPEED_DPS + "°/s)"));
 }
 document.getElementById("send-go").onclick = async () => {
   const reason = sendBlockReason();
   if (reason) {
     document.getElementById("send-msg").textContent = reason;
+    return;
+  }
+  const unhomed = unhomedJoints();
+  if (unhomed.length && !confirm("호밍 미완료 관절: " +
+      unhomed.join(", ") + "\\n보정 없이 저속으로 보낼까요?")) {
+    log("보내기 취소(호밍 미완료 확인 거부)");
     return;
   }
   let mx = 0;
@@ -3239,10 +3364,25 @@ async function renderHoming() {
       html += "<div>" + jid + " [" + method + "] " +
         (homed[jid] ? "완료" : "미완") + " " +
         "<button data-home='" + jid + "'>호밍</button> " +
+        "<button data-jogminus='" + jid + "'>-5</button>" +
+        "<button data-jogplus='" + jid + "'>+5</button> " +
+        "<input id='goto-" + jid + "' size='5' placeholder='각도'> " +
+        "<button data-goto='" + jid + "'>각도로 이동</button> " +
         "<button data-mark='" + jid + "'>현재를 0으로</button>" +
         "<span id='home-msg-" + jid + "'></span></div>";
     }
     box.innerHTML = html;
+    // M4 dropdown lives on this page but initModel (3D viewer) only
+    // runs on the main page, so fill the w4-joint options here from
+    // the same homing spec rows.
+    const w4 = document.getElementById("w4-joint");
+    if (w4) {
+      w4.innerHTML = "";
+      for (const [jid] of rows) {
+        const o = document.createElement("option");
+        o.textContent = jid; w4.appendChild(o);
+      }
+    }
     box.querySelectorAll("[data-home]").forEach((b) => {
       b.onclick = async () => {
         const m = document.getElementById("home-msg-" + b.dataset.home);
@@ -3266,8 +3406,79 @@ async function renderHoming() {
         poll();
       };
     });
+    // Manual positioning when the homing direction is wrong and a
+    // sensor run is impossible: jog step by step, or send one
+    // joint to an exact angle (other joints hold their live read).
+    const jogBy = async (jid, delta) => {
+      const m = document.getElementById("home-msg-" + jid);
+      const r = await post("/api/jog", {joint: jid, delta});
+      if (m) m.textContent = r.ok
+        ? (r.executed === false ? "미실행: " + (r.warning || "?")
+          : "이동: 요청 " + r.joint_delta + "도, 실이동 " +
+          (r.moved !== undefined ? r.moved.toFixed(1) : "?"))
+        : "실패: " + (r.error || "?");
+      poll();
+    };
+    box.querySelectorAll("[data-jogminus]").forEach((b) => {
+      b.onclick = () => jogBy(b.dataset.jogminus, -5);
+    });
+    box.querySelectorAll("[data-jogplus]").forEach((b) => {
+      b.onclick = () => jogBy(b.dataset.jogplus, 5);
+    });
+    box.querySelectorAll("[data-goto]").forEach((b) => {
+      b.onclick = async () => {
+        const jid = b.dataset.goto;
+        const m = document.getElementById("home-msg-" + jid);
+        const v = parseFloat(
+          document.getElementById("goto-" + jid).value);
+        if (isNaN(v)) {
+          if (m) m.textContent = "각도 입력이 숫자가 아닙니다";
+          return;
+        }
+        const ov = await post("/api/overview", {});
+        if (!ov.ok) {
+          if (m) m.textContent = "상태 조회 실패";
+          return;
+        }
+        const q = {};
+        for (const j of ov.joints) {
+          if (j.joint_deg === null || j.joint_deg === undefined) {
+            if (m) m.textContent =
+              "전 관절 각도 필요: " + j.joint + " 읽김";
+            return;
+          }
+          q[j.joint] = j.joint_deg;
+        }
+        q[jid] = v;
+        const r = await post("/api/goto",
+          {q_deg: q, speed_dps: 15, label: "homing-goto"});
+        if (m) m.textContent = r.ok
+          ? "이동 완료, 최대오차 " + r.max_abs_err.toFixed(2) + "도"
+          : "실패(거부): " + (r.error || "?");
+        log("호밍 수동이동 " + jid + "=" + v + ": " +
+          (r.ok ? "ok" : r.error));
+        poll();
+      };
+    });
     if (!spec.ok)
       box.innerHTML += "<div>호밍 명세 실패: " + spec.error + "</div>";
+    // One-shot all-zero at the physical reference (ㄱ) pose: every
+    // joint reads 0 here, and control starts from this pose.
+    const allBtn = document.getElementById("home-all");
+    if (allBtn) allBtn.onclick = async () => {
+      if (!confirm("현재 자세를 전 관절의 0으로 기록할까요?")) {
+        log("전부 0으로 취소됨");
+        return;
+      }
+      const m = document.getElementById("home-all-msg");
+      const r = await post("/api/home_all", {});
+      if (m) m.textContent = r.ok
+        ? "전부 0으로 기록됨"
+        : "실패: " + (r.error || "?");
+      log("전부 0으로: " +
+        (r.ok ? JSON.stringify(r.offsets) : r.error));
+      poll();
+    };
   } catch (err) {
     box.innerHTML = "호밍 로드 실패";
   }
@@ -3379,14 +3590,33 @@ async function runTwin() {
   msg.textContent = "정책=" + r.policy + " 목표=" + r.target +
     " 유지=" + JSON.stringify(r.hold_q) + " " + JSON.stringify(r.rec);
   document.getElementById("twin-send").disabled = false;
+  TWIN.armSend = 0;
+  document.getElementById("twin-send").textContent =
+    "유지 자세로 보내기 (저속)";
   log("트윈 실행: 정책=" + r.policy + " 목표=" + r.target);
 }
 async function sendTwin() {
-  if (!TWIN.holdQ) return;
-  if (!confirm("유지 자세로 저속(15°/s) 이동할까요?")) return;
+  // Inline two-step confirm: native confirm() can be permanently
+  // suppressed by the browser, which silently disabled this button.
+  const msg = document.getElementById("twin-msg");
+  const btn = document.getElementById("twin-send");
+  if (!TWIN.holdQ) {
+    if (msg) msg.textContent = "유지 자세 없음(트윈 실행 먼저)";
+    return;
+  }
+  const now = Date.now();
+  if (!TWIN.armSend || now - TWIN.armSend > 10000) {
+    TWIN.armSend = now;
+    if (msg) msg.textContent = "다시 누르면 저속(15도/s)으로 전송";
+    if (btn) btn.textContent = "확인: 유지 자세로 보내기";
+    log("트윈 전송 대기(다시 누르면 전송)");
+    return;
+  }
+  TWIN.armSend = 0;
+  if (btn) btn.textContent = "유지 자세로 보내기 (저속)";
   const r = await post("/api/goto",
     {q_deg: TWIN.holdQ, speed_dps: 15, label: "twin-hold"});
-  document.getElementById("twin-msg").textContent =
+  if (msg) msg.textContent =
     r.ok ? "유지 자세 이동 완료, 최대오차 " +
       r.max_abs_err.toFixed(2) + "°" : "실패(거부): " + r.error;
   log("트윈 전송: " + (r.ok ? "ok" : r.error));

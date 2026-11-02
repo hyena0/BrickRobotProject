@@ -1,5 +1,5 @@
 #!/usr/bin/env pybricks-micropython
-# brick-sw-version: 5B.14
+# brick-sw-version: 5B.17
 """Left brick program for Pybricks MicroPython (master).
 
 Connects to the hub broker over WiFi with umqtt, serves the left brick
@@ -26,7 +26,7 @@ except ImportError:
     import json
 
 TICK_MS = 10
-STATE_MS = 66
+STATE_MS = 200
 HB_MS = 500
 SLAVE_CMD_TIMEOUT_MS = 65000
 SLAVE_LINK_MS = 5000
@@ -145,6 +145,7 @@ class MasterRuntime:
         if clock.diff_ms(now, self._last_state_pub) >= STATE_MS:
             self._last_state_pub = now
             self.publish("robot/state/left", self.core.snapshot(), 0)
+        self.core.poll_port_retries(now, _reopen)
         if self.core.guards.heartbeat_expired(now):
             self.core._stop_all()
             self._forward_stop_to_slave()
@@ -324,35 +325,55 @@ class MasterRuntime:
         self.core.pending_events = []
 
 
+def _reopen(port, kind, mtype, threshold=None):
+    if kind == "motor":
+        return motors.open_motor(port, mtype)
+    return sensors.open_sensor(port, mtype, threshold)
+
+
 def build_core(cfg):
     mot = {}
     mtypes = {}
+    hmodes = {}
     missing = []
+    errs = []
     for m in cfg["motors"]:
+        port = m["port"]
+        mtype = m.get("type", "medium")
+        hmodes[port] = m.get("hold", "hold")
         try:
-            dev = motors.open_motor(m["port"], m.get("type", "medium"))
-        except OSError:
-            missing.append(m["port"])
+            dev = motors.open_motor(port, mtype)
+        except OSError as exc:
+            missing.append(port)
+            errs.append((port, "motor", mtype, exc, None))
         else:
-            mot[m["port"]] = dev
-            mtypes[m["port"]] = m.get("type", "medium")
+            mot[port] = dev
+            mtypes[port] = mtype
     sen = {}
     stypes = {}
     for s in cfg["sensors"]:
+        port = s["port"]
+        stype = s.get("type", "touch")
+        threshold = s.get("threshold")
         try:
-            dev = sensors.open_sensor(s["port"], s.get("type", "touch"))
-        except OSError:
-            missing.append(s["port"])
+            dev = sensors.open_sensor(port, stype, threshold)
+        except OSError as exc:
+            missing.append(port)
+            errs.append((port, "sensor", stype, exc,
+                         threshold))
         else:
-            sen[s["port"]] = dev
-            stypes[s["port"]] = s.get("type", "touch")
+            sen[port] = dev
+            stypes[port] = stype
     log.log("left: motors " + " ".join(sorted(mot))
             + "; sensors " + " ".join(sorted(sen)))
     if missing:
         log.log("left: NOT CONNECTED: " + " ".join(sorted(missing))
                 + " (check cables)")
-    bk = core.BrickCore("left", mot, sen, mtypes, stypes)
+    bk = core.BrickCore("left", mot, sen, mtypes, stypes,
+                         hmodes)
     bk.missing = missing
+    for port, kind, mtype, exc, threshold in errs:
+        bk.note_port_error(port, kind, mtype, exc, threshold)
     return bk
 
 

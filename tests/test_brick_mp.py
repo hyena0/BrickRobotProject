@@ -74,7 +74,9 @@ def test_config_json_load(tmp_path):
 def test_connection_targets_hardcoded():
     assert left_main.HUB_ADDRESS == "192.168.35.151"
     assert left_main.HUB_PORT == 1883
-    assert right_main.MASTER_BT_NAME == "ev3dev"
+    # Slave BT name comes from brick_right.json (master_bt) with an
+    # ev3dev default; only the default stays hardcoded.
+    assert right_main.MASTER_BT_DEFAULT == "ev3dev"
 
 
 def test_config_errors(tmp_path, monkeypatch):
@@ -337,6 +339,154 @@ def test_snapshot_reports_latch_reason():
     brick.guards.latch_reason = "stall:outA"
     snap = brick.snapshot()
     assert snap["latched"] and snap["latch_reason"] == "stall:outA"
+
+
+def test_unknown_port_error_lists_known_ports():
+    brick = make_core("left")  # motors: outA only
+    ack = brick.handle({"id": "m1", "cmd": "run_targets",
+                        "args": {"moves": [{"port": "outB",
+                                            "target": 10.0,
+                                            "speed": 30.0}]}})
+    assert ack.ok is False
+    assert "outB" in ack.error and "outA" in ack.error
+
+
+def test_info_and_snapshot_carry_sw_version():
+    brick = make_core("left")
+    assert brick.info()["sw_version"] == brick_version.BRICK_SW_VERSION
+    assert brick.snapshot()["sw_version"] == brick_version.BRICK_SW_VERSION
+
+
+def test_port_error_record_and_retry_success():
+    brick = make_core("left")  # motors: outA only
+    brick.note_port_error("outA", "motor", "large",
+                          OSError(19, "No such device"))
+    assert brick.port_errors["outA"] >= 1
+    evts = [e for e in brick.pending_events if e.event == "port_error"]
+    assert evts and evts[0].detail["port"] == "outA"
+    assert evts[0].detail["errno"] == 19
+    assert "outA" not in brick.motors
+    now = clock.now_ms()
+    brick.poll_port_retries(now + 2000,
+                            lambda p, k, t, th: motors.FakeMotor(p, 0.0))
+    assert "outA" in brick.motors
+    rec = [e for e in brick.pending_events
+           if e.event == "port_recovered"]
+    assert rec and rec[0].detail["port"] == "outA"
+
+
+def test_port_retry_latches_after_five_failures():
+    brick = make_core("left")
+    brick.note_port_error("outA", "motor", "large",
+                          OSError(19, "No such device"))
+
+    def bad_opener(port, kind, mtype):
+        raise OSError(19, "No such device")
+
+    t = clock.now_ms()
+    for i in range(5):
+        brick.poll_port_retries(t + i * 1100, bad_opener)
+    assert brick.guards.latched
+    assert "outA" in brick.guards.latch_reason
+    assert brick.port_errors["outA"] >= 6
+
+
+def test_idle_guard_reads_only_rule_sensors():
+    brick = make_core("left")
+    brick.sensors["in2"] = sensors.FakeSensor("in2", 0)
+    reads = []
+    for port, dev in brick.sensors.items():
+        orig = dev.read
+        def counted(orig=orig, port=port):
+            reads.append(port)
+            return orig()
+        dev.read = counted
+    brick.guards.configure([guards.SensorRule("in1", False)])
+    brick.poll_idle_guards()
+    assert "in1" in reads
+    assert "in2" not in reads
+
+
+def test_color_rule_blocked_until_calibrated():
+    class FakeEye(object):
+        def reflection(self):
+            return 80
+
+    brick = make_core("left")
+    brick.sensors["in2"] = sensors.PybricksColorSensor("in2", FakeEye())
+    brick.sensor_types["in2"] = "color"
+    args = {"rules": [{"sensor": "in2"}]}
+    refused = brick.handle({"id": "1", "cmd": "set_guards",
+                            "args": args}, None)
+    assert refused.ok is False and "in2" in refused.error
+    done = brick.handle({"id": "2", "cmd": "set_threshold",
+                        "args": {"port": "in2", "value": 60.0}}, None)
+    assert done.ok is True
+    allowed = brick.handle({"id": "3", "cmd": "set_guards",
+                            "args": args}, None)
+    assert allowed.ok is True
+
+
+def test_settle_hold_relaxes_unloaded_ports():
+    brick = make_core("left")
+    brick.hold_modes = {"outA": "brake"}
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 10.0,
+                                 "speed": 30.0}}, None)
+    assert ack.ok is True
+    assert brick.motors["outA"].hold_mode == "brake"
+
+
+def test_settle_hold_defaults_to_hold():
+    brick = make_core("left")
+    ack = brick.handle({"id": "1", "cmd": "run_target",
+                        "args": {"port": "outA", "target": 10.0,
+                                 "speed": 30.0}}, None)
+    assert ack.ok is True
+    assert brick.motors["outA"].hold_mode == "hold"
+
+
+def test_config_passes_master_bt():
+    cfg = {"brick": "right", "motors": [], "sensors": [],
+           "master_bt": "mybrick"}
+    out = brick_config._validate(cfg, "test", None)
+    assert out.get("master_bt") == "mybrick"
+
+
+def test_open_motor_tolerates_old_firmware(monkeypatch):
+    # Old firmware rejects the reset_angle kwarg with "extra keyword
+    # arguments given" (MicroPython). open_motor must fall back to
+    # the plain constructor instead of crashing the brick at boot.
+    import sys
+    import types
+
+    ev3dev = types.ModuleType("pybricks.ev3devices")
+    params = types.ModuleType("pybricks.parameters")
+
+    class OldMotor:
+        def __init__(self, port, *args, **kwargs):
+            if kwargs:
+                raise TypeError("extra keyword arguments given")
+            self._port = port
+
+        def angle(self):
+            return 0.0
+
+    class Port:
+        A = "A"
+
+    class Stop:
+        HOLD = "HOLD"
+
+    ev3dev.Motor = OldMotor
+    params.Port = Port
+    params.Stop = Stop
+    monkeypatch.setitem(sys.modules, "pybricks",
+                        types.ModuleType("pybricks"))
+    monkeypatch.setitem(sys.modules, "pybricks.ev3devices", ev3dev)
+    monkeypatch.setitem(sys.modules, "pybricks.parameters", params)
+    m = motors.open_motor("outA", "large")
+    assert m.position() == 0.0
 
 
 # -- mailbox relay ------------------------------------------------------------

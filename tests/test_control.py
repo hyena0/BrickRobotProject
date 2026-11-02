@@ -131,9 +131,14 @@ def test_model_payload(handler):
 
 
 def test_page_initial_pose_and_up_axis():
-    # Initial 3D view: assembled pose01 (io render reference),
-    # Z-up model under a -90 deg X group, boxes rested on the grid.
-    assert "6.595" in ctl.PAGE and "138.148" in ctl.PAGE
+    # Initial 3D view: the park/rest pose (a verified ㄱ shape with
+    # the TCP above the table), NOT poses10 pose01 whose TCP sits
+    # ~190 mm underground (bugs/basic_bottom.png). Values mirror
+    # src/console/calib_session.py PARK_Q_DEG.
+    from src.console import calib_session as cs
+    for value in cs.PARK_Q_DEG.values():
+        assert str(value) in ctl.PAGE
+    assert "6.595" not in ctl.PAGE and "138.148" not in ctl.PAGE
     assert "arm.rotation.x = -Math.PI / 2" in ctl.PAGE
     assert "setFromObject(st.arm)" in ctl.PAGE
     # Regression: the box-mesh era is over; every identifier the
@@ -522,6 +527,144 @@ def test_goto_refused_latched(handler, tmp_path, monkeypatch):
     q = {j: 0.0 for j in handler.jog_map}
     status, res = handler.dispatch_api("/api/goto", {"q_deg": q})
     assert status == 400 and "latched" in res["error"]
+
+
+def test_goto_needs_no_calibration(handler, tmp_path, monkeypatch):
+    # Calibration-independent testing: goto/preview/pose work with no
+    # homing record and no direction confirmations at all.
+    _tmp_runs(monkeypatch, tmp_path)
+    monkeypatch.setattr(handler, "direction_path",
+                        str(tmp_path / "absent-direction.json"))
+    q = {j: 0.0 for j in handler.jog_map}
+    status, res = handler.dispatch_api("/api/goto",
+                                       {"q_deg": q, "speed_dps": 15,
+                                        "label": "t-nocalib"})
+    assert status == 200 and res["ok"]
+    status, res = handler.dispatch_api("/api/preview", {"q_deg": q})
+    assert status == 200 and res["ok"] and res["range"] == "ok"
+
+
+def test_init_target_is_park_pose():
+    # The initial IK target must start at the verified park/rest pose
+    # (a ㄱ shape with TCP ~386 mm above the table), not at poses10
+    # pose01 whose TCP sits ~190 mm UNDER the table
+    # (bugs/basic_bottom.png).
+    assert "PARK_Q" in ctl.PAGE
+    assert "POSE01" not in ctl.PAGE
+    from src.console import calib_session as cs
+    for joint, value in cs.PARK_Q_DEG.items():
+        assert str(value) in ctl.PAGE, joint
+
+
+def test_ldraw_switch_keeps_primitives_until_ready():
+    # Switching to LDraw must never leave an empty stage while the
+    # ~75 MB pack loads: primitives stay until meshes are ready
+    # (bugs/MR_jos_hw_disappear.png).
+    assert 'VSRC === "ldraw" && MESHES.ready' in ctl.PAGE
+    assert "if (g) g.visible" in ctl.PAGE
+    assert "LDraw 메시 로딩 중" in ctl.PAGE
+
+
+def test_homing_rows_offer_manual_positioning():
+    # When a homing direction is wrong and the sensor run is
+    # impossible, each joint row must still offer -5/+5 jog, an
+    # exact-angle move, and mark-as-zero.
+    assert "data-jogminus" in ctl.PAGE
+    assert "data-jogplus" in ctl.PAGE
+    assert "data-goto" in ctl.PAGE
+    assert "data-mark" in ctl.PAGE
+    assert "각도로 이동" in ctl.PAGE
+
+
+def test_home_all_zero_marks_coupled_zero(handler, tmp_path,
+                                            monkeypatch):
+    # One-shot all-zero at the physical reference pose: one encoder
+    # snapshot, offsets s.t. the coupled readback is exactly 0
+    # (the old per-joint formula leaves J5/J6 off via cross terms).
+    _tmp_runs(monkeypatch, tmp_path)
+    real_send = handler.transport.send
+
+    def biased(brick, cmd, *a, **k):
+        r = real_send(brick, cmd, *a, **k)
+        if cmd == "read":
+            r = dict(r)
+            r["encoders"] = {p: v + 100.0
+                             for p, v in r["encoders"].items()}
+        return r
+
+    monkeypatch.setattr(handler.transport, "send", biased)
+    status, res = handler.dispatch_api("/api/home_all", {})
+    assert status == 200 and res["ok"]
+    assert set(res["offsets"]) == set(handler.jog_map)
+    from src.console import mini
+    enc = {}
+    for brick in handler.transport.bricks:
+        enc.update({(brick, port): motor for port, motor in
+                    handler.transport.send(brick, "read")
+                    ["encoders"].items()})
+    rb = mini.coupled_joint_readback(enc, handler.jog_map,
+                                     res["offsets"])
+    assert all(abs(v) < 1e-9 for v in rb.values())
+
+
+def test_twin_send_uses_inline_confirm():
+    # Native confirm() can be permanently suppressed by the browser
+    # ("don't allow more dialogs"), which made twin-send silently do
+    # nothing. Sending must arm inline and never call confirm().
+    assert "armSend" in ctl.PAGE
+    assert "다시 누르면" in ctl.PAGE
+    assert "confirm(\"유지 자세로 저속" not in ctl.PAGE
+
+
+def test_status_changes_are_logged():
+    # The page log must record connection, latch and per-joint
+    # homed/read state: a baseline once, then only on change.
+    assert "상태기준 연결=" in ctl.PAGE
+    assert "상태변경 연결=" in ctl.PAGE
+    assert "_lastStSig" in ctl.PAGE
+
+
+def test_every_log_line_carries_status_context():
+    # Every log line must carry live left/right + joint context so a
+    # failure line alone shows the cause; only the status lines
+    # themselves are exempt (they already carry it).
+    assert "function statusCtx" in ctl.PAGE
+    assert "상태수신전" in ctl.PAGE
+
+
+def test_mode_reports_brick_inventory(handler):
+    status, res = handler.dispatch_api("/api/mode", {})
+    assert status == 200 and res["connected"] is True
+    assert res["identity"] == {"left": "left", "right": "right"}
+    assert "outA" in res["motors"]["left"]
+    assert res["sw_version"]["left"] == res["sw_version"]["right"]
+    assert res["missing"] == {"left": [], "right": []}
+
+
+def test_m4_dropdown_filled_without_3d():
+    # The M4 joint dropdown lives on the cal page where initModel
+    # (3D viewer) never runs; renderHoming must fill it from the
+    # homing spec, or no joint can ever be selected.
+    assert "w4-joint options" in ctl.PAGE
+
+
+def test_diag_shows_brick_inventory():
+    assert "brickInv" in ctl.PAGE
+    assert "미연결" in ctl.PAGE
+
+
+def test_homing_section_offers_mark_all():
+    assert "home-all" in ctl.PAGE
+    assert "전부 0으로" in ctl.PAGE
+    assert "/api/home_all" in ctl.PAGE
+
+
+def test_send_button_not_blocked_by_homing():
+    # The main-page send gate must not hard-block unhomed joints;
+    # calibration-independent testing goes through a click-time
+    # confirm instead (see unhomedJoints in PAGE).
+    assert "if (lastOv.joints.some((j) => !j.homed))" not in ctl.PAGE
+    assert "unhomedJoints" in ctl.PAGE
 
 
 def test_offline_virtual_only_refuses_motion():

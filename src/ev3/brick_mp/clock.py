@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.14
+# brick-sw-version: 5B.17
 """Small time helpers that run on MicroPython and on CPython.
 
 On the brick this uses ticks_ms and ticks_diff (wrap safe). On the PC

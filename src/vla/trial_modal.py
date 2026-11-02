@@ -62,6 +62,14 @@ EXPECTED_VAL_EPS = 40
 TRIAL_CFG = {"steps": 200, "batch_size": 8, "save_freq": 100,
              "job_name": "vla-trial-200", "proc_timeout_s": 1700,
              "dataset_root": DATA_DIR}
+#: 9B fine-tune: from the 6000-step weights, +3000 steps, ckpt every 1000.
+#: Output is a fresh timestamped dir; never reuses an existing one.
+FT9B_CFG = {"steps": 3000, "batch_size": 32, "save_freq": 1000,
+            "job_name": "vla-ft9b-3000", "proc_timeout_s": 3500,
+            "dataset_root": "/data/lerobot9b-train"}
+#: 9B eval: fresh sim scenes (seed 65, not the 6.4 seed 64).
+EVAL_FT_N = 100
+EVAL_FT_SEED = 65
 #: Full training config (6.3).
 FULL_CFG = {"steps": 6000, "batch_size": 32, "save_freq": 1000,
             "job_name": "vla-full-6000", "proc_timeout_s": 13800,
@@ -76,6 +84,11 @@ REPO_ID = "local/brickrobot-point"
 # pulls transformers/accelerate/num2words, "dataset" pulls
 # datasets/pandas/pyarrow/av/torchcodec/jsonlines.
 LEROBOT_PIN = "lerobot[smolvla,dataset]==0.6.1"
+#: MuJoCo for the sim-side drain state (drain.py, first-frame + closed).
+#: Pinned to the Mac .venv version verified locally. Only mj_forward on
+#: CPU is used -- no Renderer is ever created, so no EGL/OSMesa or other
+#: rendering setup is needed on the image.
+MUJOCO_PIN = "mujoco==3.17.0"
 
 #: Modules the training step imports. check_env imports every one, so a
 #: passing env can no longer fail train at the import stage.
@@ -84,6 +97,19 @@ TRAIN_MODULES = [
     "lerobot.datasets.lerobot_dataset",
     "lerobot.policies.smolvla.modeling_smolvla",
     "lerobot.scripts.lerobot_train",
+]
+
+#: Modules the eval/drain steps import (every Modal function that runs
+#: a policy drain). check_env imports every one, so `--which env`
+#: catches a missing dependency (e.g. mujoco) before eval-ft runs.
+EVAL_MODULES = [
+    "src.vla.drain",
+    "mujoco",
+    "PIL",
+    "src.vla.build9b",
+    "src.vla.evaluate",
+    "src.vla.demo",
+    "src.vla.scene",
 ]
 
 #: Dataset key -> policy key. smolvla_base expects camera1..3; we have one
@@ -97,7 +123,7 @@ EMPTY_CAMERAS = 2
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("ffmpeg")
-    .pip_install(LEROBOT_PIN, "pyyaml", "scipy")
+    .pip_install(LEROBOT_PIN, MUJOCO_PIN, "pyyaml", "scipy")
     # Eval runs the repo's sim + IK on the remote side. Only public
     # files are baked: slot coords live in src/vla/slot_seeds.json,
     # so assets/private and *.local.* never leave the Mac.
@@ -177,6 +203,8 @@ def check_env() -> str:
     import os
     import sys
 
+    sys.path.insert(0, "/root")
+
     rep: dict = {"python": sys.version.split()[0]}
     try:
         import torch
@@ -205,6 +233,20 @@ def check_env() -> str:
     if missing:
         return dumps_result({**rep, "ok": False,
                              "error": "missing: " + ",".join(missing)})
+    missing_eval = []
+    versions = {}
+    for mod in EVAL_MODULES:
+        try:
+            m = importlib.import_module(mod)
+            versions[mod] = str(getattr(m, "__version__", "?"))
+        except Exception:  # noqa: BLE001
+            missing_eval.append(mod)
+    rep["eval_imports_ok"] = not missing_eval
+    rep["eval_versions"] = versions
+    if missing_eval:
+        return dumps_result({**rep, "ok": False,
+                             "error": "missing eval modules: " +
+                             ",".join(missing_eval)})
     import shutil
     import subprocess
     if shutil.which("lerobot-train") is None:
@@ -389,7 +431,8 @@ def _check_full_data():
     return ok, detail
 
 
-def _run_train(cfg, prefix, root="/data"):
+def _run_train(cfg, prefix, root="/data",
+                policy_path="lerobot/smolvla_base"):
     """Run lerobot-train; returns (ckpt|None, train_s, tail, error|None).
 
     Streams child output line by line: every line goes to the Modal
@@ -410,7 +453,7 @@ def _run_train(cfg, prefix, root="/data"):
     cmd = ["lerobot-train",
            f"--dataset.repo_id={REPO_ID}",
            f"--dataset.root={cfg['dataset_root']}",
-           "--policy.path=lerobot/smolvla_base",
+           f"--policy.path={policy_path}",
            "--policy.device=cuda",
            "--policy.push_to_hub=false",
            f"--policy.empty_cameras={EMPTY_CAMERAS}",
@@ -637,9 +680,8 @@ def eval_policies() -> str:
     import random
     import subprocess
 
-    import torch
-
     import src.vla.demo as D
+    import src.vla.drain as DR
     import src.vla.evaluate as E
     import src.vla.scene as S
     from src.kin.model import load_model
@@ -694,13 +736,7 @@ def eval_policies() -> str:
         random_rows.append(E.score_episode([float(v) for v in tip],
                                           sc["blocks"], sc["target"]))
 
-    def to_obs(img_np, q, task):
-        return {"observation.images.top":
-                torch.from_numpy(img_np).permute(2, 0, 1).float()
-                / 255.0,
-                "observation.state":
-                torch.tensor(q, dtype=torch.float32),
-                "task": task}
+    drain_chunk = DR.drain_chunk
 
     results = {"expert": E.summarize_eval(expert_rows),
                "random": E.summarize_eval(random_rows),
@@ -728,28 +764,19 @@ def eval_policies() -> str:
             ep_frames = []
             for i, sc in enumerate(scenes):
                 task = f"Point to the {sc['target']} block."
-                policy.reset()
-                img0 = None
-                q = list(rest_q)
                 frames = []
-                with torch.no_grad():
-                    for t in range(50):
-                        if mode == "closed" or img0 is None:
-                            img = S.render_frame(sc, q, doc, cam, None)
-                            if mode == "closed" and i < 6:
-                                frames.append(img)
-                            if mode == "first":
-                                img0 = img
-                        else:
-                            img = img0
-                        if mode == "closed":
-                            policy.reset()
-                        batch = preprocessor(to_obs(img, q, task))
-                        action = policy.select_action(batch)
-                        out = postprocessor(action)
-                        a = (out.detach().flatten().tolist()
-                             if torch.is_tensor(out) else list(out))
-                        q = [float(v) for v in a]
+                img0 = S.render_frame(sc, rest_q, doc, cam, None)
+                stacked, info = drain_chunk(
+                    policy, preprocessor, postprocessor, img0,
+                    rest_q, task, n=50, state_source="command",
+                    render_fn=(lambda q, sc=sc: S.render_frame(
+                        sc, q, doc, cam, None))
+                    if mode == "closed" else None,
+                    reset_each_step=(mode == "closed"),
+                    frames_out=frames
+                    if (mode == "closed" and i < 6) else None)
+                assert info["state_source"] == "command"
+                q = [float(v) for v in stacked[-1]]
                 tip, _ = S.tip_world(q, tdoc)
                 rows.append(E.score_episode([float(v) for v in tip],
                                             sc["blocks"], sc["target"]))
@@ -886,8 +913,306 @@ def sens_instructions() -> str:
                          "scenes": out_scenes, "holds": holds})
 
 
+def _resolve_ft_base(root="/data"):
+    """Newest <root>/train-* run holding checkpoints/006000 weights."""
+    import glob
+    import os
+    cands = sorted(glob.glob(os.path.join(
+        root, "train-*", "checkpoints", "006000", "pretrained_model")),
+        key=os.path.getmtime)
+    if not cands:
+        return None
+    return cands[-1]
+
+
+def _check_9b_data(root="/data"):
+    """Volume holds 900 virtual recipes + 15 train / 5 test real batches."""
+    import json
+    import os
+    detail = {}
+    try:
+        recs = json.load(open(os.path.join(
+            root, "ep9b", "recipes.json"), encoding="utf-8"))
+        detail["recipes"] = sum(1 for r in recs
+                               if r.get("status") == "pass"
+                               and "traj" in r)
+    except Exception as exc:  # noqa: BLE001
+        detail["recipes"] = f"bad: {exc}"[:120]
+    train, test = 0, []
+    try:
+        with open(os.path.join(root, "real9b", "manifest.jsonl"),
+                  encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if rec.get("split") == "train":
+                    train += 1
+                else:
+                    test.append(rec.get("batch"))
+        detail["real_train_batches"] = train
+        detail["real_test_batches"] = sorted(test)
+    except Exception as exc:  # noqa: BLE001
+        detail["real"] = f"bad: {exc}"[:120]
+    ok = (detail.get("recipes") == 900
+          and detail.get("real_train_batches") == 15
+          and len(detail.get("real_test_batches", [])) == 5)
+    return ok, detail
+
+
+@app.function(image=image, timeout=7200,
+              volumes={DATA_MOUNT: vol}, secrets=[hf_secret])
+def build9b() -> str:
+    """9B dataset build on the Volume (CPU): 900 virtual + real repeats.
+
+    Reads /data/ep9b/recipes.json and /data/real9b (tray-only crops +
+    manifest, uploaded by the user), renders every frame with
+    scene.render9b, and writes the LeRobot dataset to
+    /data/lerobot9b-train. Stops unless the data check passes.
+    """
+    import sys
+    sys.path.insert(0, "/root")
+    import os
+    os.chdir("/root")
+    ok, detail = _check_9b_data()
+    if not ok:
+        return dumps_result({"ok": False, "stage": "data-check",
+                             "detail": detail,
+                             "error": "need 900 recipes + 15/5 batches"})
+    import src.vla.build9b as B9
+    out = B9.convert9b("/data/lerobot9b-train", "/data/ep9b/recipes.json",
+                       "/data/real9b", B9.REAL_REPEAT)
+    rep = __import__("json").load(open(os.path.join(out, "report9b.json"),
+                                      encoding="utf-8"))
+    return dumps_result({"ok": True, "out": out, **rep})
+
+
+@app.function(image=image, gpu="A100-40GB", timeout=3600,
+              volumes={DATA_MOUNT: vol}, secrets=[hf_secret])
+def train_ft(data: str = "lerobot9b-train") -> str:
+    """9B fine-tune: init from 6000-step weights, +3000 steps (A100).
+
+    data is the Volume-relative dataset folder (no /data prefix).
+    Fresh timestamped dir per run (/data/ft9b-*); the 6.3 train dirs
+    are never modified. Stops before starting unless the dataset
+    and a 006000 base checkpoint both exist on the Volume.
+    """
+    import copy
+    import glob
+    import os
+    ds_root = "/data/" + data
+    ds_ok = (os.path.isdir(ds_root)
+             and glob.glob(os.path.join(ds_root, "meta", "info.json")))
+    base = _resolve_ft_base()
+    if not ds_ok or base is None:
+        return dumps_result({"ok": False, "stage": "data-check",
+                             "dataset": bool(ds_ok), "base": base,
+                             "error": "need dataset + 006000 base"})
+    cfg = copy.deepcopy(FT9B_CFG)
+    cfg["dataset_root"] = ds_root
+    ckpt, train_s, tail, error = _run_train(cfg, "ft9b",
+                                            policy_path=base)
+    out_dir = os.path.dirname(
+        os.path.dirname(os.path.dirname(ckpt))) if ckpt else None
+    if error is not None:
+        return dumps_result({"ok": False, "stage": "train",
+                             "error": error, "out_dir": out_dir,
+                             "train_s": train_s, "tail": tail})
+    return dumps_result({"ok": True, "steps": 3000, "batch_size": 32,
+                         "base": base, "out_dir": out_dir,
+                         "train_s": train_s,
+                         "sec_per_step": round(train_s / 3000, 2),
+                         "checkpoint": ckpt, "tail": tail[-500:]})
+
+
+def _eval_ft_real(policy, preprocessor, postprocessor, rest_q, tdoc,
+                   out_dir, label, root="/data"):
+    """Real test-5 batches on the Volume: fixed photo + command drain.
+
+    Returns (rows, fails). Empty rows when no test batches are present.
+    """
+    import json
+    import os
+
+    import numpy as np
+    from PIL import Image
+
+    import src.vla.evaluate as E
+    import src.vla.scene as S
+    from src.vla.drain import drain_chunk
+
+    man = os.path.join(root, "real9b", "manifest.jsonl")
+    if not os.path.exists(man):
+        return [], []
+    recs = []
+    with open(man, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                rec = json.loads(line)
+                if rec.get("split") == "test":
+                    recs.append(rec)
+    xy_of = {v: k for k, v in S.SLOT_IDS.items()}
+    rows, fails = [], []
+    for rec in recs:
+        photo = np.asarray(Image.open(os.path.join(
+            root, "real9b", rec["photo"])).convert("RGB"))
+        tj = json.load(open(os.path.join(
+            root, "real9b", rec["traj_file"]), encoding="utf-8"))
+        slots_xy = {s: xy_of[s] for s in rec["slots"]}
+        for s in tj["samples"]:
+            stacked, info = drain_chunk(
+                policy, preprocessor, postprocessor, photo,
+                rest_q, s["task"], n=50, state_source="command")
+            assert info["state_source"] == "command"
+            tip, _ = S.tip_world([float(v) for v in stacked[-1]],
+                                 tdoc)
+            tip = [float(v) for v in tip]
+            blocks = [{"colour": c, "x": slots_xy[sid][0],
+                       "y": slots_xy[sid][1]}
+                      for sid, c in rec["slots"].items()]
+            row = E.score_episode(tip, blocks, s["colour"])
+            row.update({"batch": rec["batch"], "target": s["colour"],
+                        "slot": s["slot"],
+                        "state_source": "command"})
+            rows.append(row)
+            if not row.get("success") and len(fails) < 6:
+                fails.append({"batch": rec["batch"],
+                              "target": s["colour"],
+                              "herr_mm": row["hold_herr_mm"]})
+    return rows, fails
+
+
+@app.function(image=image, gpu="T4", timeout=3600,
+              volumes={DATA_MOUNT: vol}, secrets=[hf_secret])
+def eval_ft(a: str = "", b: str = "") -> str:
+    """9B before/after: first-frame-only on 100 fresh sim scenes.
+
+    a = before ckpt (in-Volume absolute path), b = after ckpt.
+    Plus expert (6.1 pipeline) and random baselines, same scorer as 6.4.
+    Saves up to 6 failure first-frames per ckpt, writes
+    /data/eval-ft-<ts>/report.json.
+    """
+    import sys
+    sys.path.insert(0, "/root")
+    import json
+    import os
+    import random
+
+    import src.vla.demo as D
+    import src.vla.drain as DR
+    import src.vla.evaluate as E
+    import src.vla.scene as S
+    from src.kin.model import load_model
+
+    drain_chunk = DR.drain_chunk
+
+    os.chdir("/root")
+    if not a or not b or not os.path.isdir(a) or not os.path.isdir(b):
+        return dumps_result({"ok": False, "error":
+                             "need --a/--b checkpoint dirs on the Volume"})
+    rng = random.Random(EVAL_FT_SEED)
+    cam = S.load_camera("/root/config/sim_camera.yaml")
+    doc = load_model("/root/models/robot_inferred.json")
+    tdoc = S.tip_doc(doc)
+    rep60 = json.load(open("/root/runs/vla/6.0/report.json",
+                           encoding="utf-8"))
+    rest_q = [float(v) for v in rep60["rest_q_deg"]]
+    lims = S.adopted_ranges()
+    coupled = S.load_package()["coupled_limits"]
+    slots = S.load_slot_seeds()
+    mat_seeds = [p["seed"] for p in slots]
+    from src.vla.scene import nearest_mat_seed
+
+    from lerobot.policies import make_pre_post_processors
+    from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+
+    out_dir, _ = _prepare_run_dirs("eval-ft")
+    os.makedirs(out_dir, exist_ok=True)
+    scenes = [E.sample_scene_for_eval(rng) for _ in range(EVAL_FT_N)]
+
+    expert_rows, random_rows = [], []
+    rng_r = random.Random(6464)
+    for i, sc in enumerate(scenes):
+        tb = next(x for x in sc["blocks"]
+                  if x["colour"] == sc["target"])
+        seed_q = nearest_mat_seed(tb["x"], tb["y"], mat_seeds, slots)
+        rec, traj = D.run_demo(i, sc, rest_q, tdoc, seed_q)
+        if traj is None:
+            expert_rows.append({"success": False, "wrong_block": False,
+                                "hold_herr_mm": 1e9, "hold_z_mm": -1})
+        else:
+            tip, _ = S.tip_world(traj[-1], tdoc)
+            expert_rows.append(E.score_episode(
+                [float(v) for v in tip], sc["blocks"], sc["target"]))
+        q = list(rest_q)
+        for _ in range(50):
+            q = E.random_step(rng_r, lims, coupled)
+        tip, _ = S.tip_world(q, tdoc)
+        random_rows.append(E.score_episode([float(v) for v in tip],
+                                          sc["blocks"], sc["target"]))
+
+    results = {"expert": E.summarize_eval(expert_rows),
+               "random": E.summarize_eval(random_rows),
+               "scenes": EVAL_FT_N, "seed": EVAL_FT_SEED,
+               "checkpoints": {}}
+    for label, ckpt in (("before", a), ("after", b)):
+        policy = SmolVLAPolicy.from_pretrained(ckpt)
+        policy.to("cuda")
+        policy.eval()
+        preprocessor, postprocessor = make_pre_post_processors(
+            policy.config, pretrained_path=ckpt,
+            preprocessor_overrides={
+                "device_processor": {"device": "cuda"},
+                "rename_observations_processor": {
+                    "rename_map": RENAME_MAP},
+            })
+        rows, fails = [], []
+        sim_sources = set()
+        for i, sc in enumerate(scenes):
+            task = f"Point to the {sc['target']} block."
+            img = S.render_frame(sc, rest_q, doc, cam, None)
+            stacked, info = drain_chunk(
+                policy, preprocessor, postprocessor, img, rest_q,
+                task, n=50, state_source="mujoco", doc=doc)
+            assert info["state_source"] in ("mujoco", "command")
+            sim_sources.add(info["state_source"] +
+                            ("+" + info["state_fallback"]
+                             if "state_fallback" in info else ""))
+            tip, _ = S.tip_world([float(v) for v in stacked[-1]],
+                                 tdoc)
+            row = E.score_episode([float(v) for v in tip],
+                                  sc["blocks"], sc["target"])
+            rows.append(row)
+            if not row.get("success") and len(fails) < 6:
+                fp = os.path.join(out_dir, f"{label}_fail{i:02d}.png")
+                S.write_png(fp, img)
+                fails.append({"scene": i, "target": sc["target"],
+                              "tip": [round(float(v), 1) for v in tip],
+                              "png": fp})
+        real_rows, real_fails = _eval_ft_real(
+            policy, preprocessor, postprocessor, rest_q, tdoc,
+            out_dir, label)
+        results["checkpoints"][label] = {
+            "ok": True, "checkpoint": ckpt,
+            **E.summarize_eval(rows), "failures": fails,
+            "real_test": E.summarize_eval(real_rows)
+            if real_rows else {"skipped": "no real9b test batches"},
+            "real_failures": real_fails,
+            "state_source_sim": sorted(sim_sources),
+            "state_source_real": "command"}
+        del policy
+    with open(os.path.join(out_dir, "report.json"), "w",
+              encoding="utf-8") as fh:
+        json.dump(results, fh, indent=1)
+    results["out_dir"] = out_dir
+    return dumps_result(results)
+
+
 @app.local_entrypoint()
-def main(which: str = "train") -> None:
+def main(which: str = "train", a: str = "", b: str = "",
+         data: str = "lerobot9b-train") -> None:
     import json
     import pathlib
     _check_upload_list()
@@ -905,6 +1230,12 @@ def main(which: str = "train") -> None:
         raw = sens_instructions.remote()
     elif which == "train-full":
         raw = train_full.remote()
+    elif which == "build9b":
+        raw = build9b.remote()
+    elif which == "train-ft":
+        raw = train_ft.remote(data=data)
+    elif which == "eval-ft":
+        raw = eval_ft.remote(a=a, b=b)
     else:
         raw = train_trial.remote()
     obj = json.loads(raw)  # remote always returns a JSON str

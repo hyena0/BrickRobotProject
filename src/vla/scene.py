@@ -231,7 +231,14 @@ def seg_tris(a, b, r, rgb):
     return _box_faces([pts[i] for i in order], rgb)
 
 
-def scene_static_tris():
+#: 9B measured-appearance overrides. Both default to None/False so every
+#: existing caller renders exactly as before. The 9B builder sets them.
+PALETTE9B = None   # e.g. {"red": (r,g,b), ...} measured from real photos
+PAPER9B = None     # pedestal/paper rgb measured from real photos
+DR9B = False       # photometric domain randomization in render9b only
+
+
+def scene_static_tris(paper_rgb=None):
     """Table + pedestal (background, not the arm)."""
     tris = []
     H = 800.0  # table quad half-size
@@ -241,7 +248,7 @@ def scene_static_tris():
     tris.append((np.array([[-H, -H, z], [H, H, z], [-H, H, z]],
                           float), (0.72, 0.72, 0.70)))
     tris += box_tris(-110.0, 230.0, -110.4, 300.0, 260.0, 220.8, 0.0,
-                     (0.88, 0.87, 0.84))  # pedestal block, top z=0
+                     paper_rgb or (0.88, 0.87, 0.84))  # pedestal, top z=0
     return tris
 
 
@@ -259,8 +266,9 @@ def arm_tris(q_deg, doc, rgb=(0.25, 0.25, 0.28)):
     return tris, tip, jpts
 
 
-def block_tris(block):
-    rgb = COLORS[block["colour"]]
+def block_tris(block, palette=None):
+    pal = palette or PALETTE9B or COLORS
+    rgb = pal[block["colour"]]
     return box_tris(block["x"], block["y"], BLOCK_SIZE[2] / 2,
                     BLOCK_SIZE[0], BLOCK_SIZE[1], BLOCK_SIZE[2],
                     block["yaw_deg"], rgb)
@@ -277,13 +285,13 @@ def project_points(pts, eye, right, up, fwd, f, cx=128.0, cy=128.0):
     return u, v, zc
 
 
-def rasterize(tris, cam, gain=1.0):
+def rasterize(tris, cam, gain=1.0, light=None):
     """Z-buffer render of (tri, rgb) list. Returns float IMGxIMGx3."""
     W, H = cam["image_px"]
     eye, right, up, fwd, f = cam_frame(cam)
     img = np.zeros((H, W, 3))
     zbuf = np.full((H, W), np.inf)
-    lx, ly, lz = np.array(LIGHT, float)
+    lx, ly, lz = np.array(light if light is not None else LIGHT, float)
     ln = math.sqrt(lx * lx + ly * ly + lz * lz)
     lx, ly, lz = lx / ln, ly / ln, lz / ln
     for tri, rgb in tris:
@@ -518,6 +526,57 @@ def jitter_cam(cam, rng):
                           cam["position_mm"][1] + rng.uniform(-10, 10),
                           cam["position_mm"][2]]
     return out
+
+
+#: 9B measured base palette (sRGB means from runs/stage9/real/batch_01.png,
+#: divided by a typical top-face shade 0.6; blue has no real sample yet and
+#: is the sim value scaled by the measured exposure factor 0.48).
+PALETTE9B_MEASURED = {
+    "red": (0.60, 0.07, 0.08),
+    "yellow": (0.68, 0.51, 0.13),
+    "green": (0.48, 0.61, 0.18),
+    "blue": (0.05, 0.14, 0.43),
+}
+PAPER9B_MEASURED = (0.65, 0.65, 0.65)
+
+
+def render9b(scene, q_deg, doc, cam, seed, palette=None, paper=None,
+             photo_dr=False):
+    """9B frame: measured palette + strong photometric DR (seeded).
+
+    Geometry (slots, arm, camera) is untouched, so the 6.x gates still
+    apply. DR, all drawn from a dedicated RNG stream: exposure gain
+    0.75-1.25, per-channel block jitter +-15%, light-dir jitter (shadow
+    variation), Gaussian blur 0-0.9px, Gaussian noise 0-5/255.
+    With photo_dr=True the same photometric DR is applied to an already
+    rendered array (used for repeated real frames).
+    Deterministic in (inputs, seed).
+    """
+    from scipy.ndimage import gaussian_filter
+    rng = np.random.default_rng(seed)
+    if photo_dr:
+        img = np.asarray(scene, float) / 255.0
+        gain = float(rng.uniform(0.85, 1.15))
+        img = img * gain
+    else:
+        pal = dict(palette or PALETTE9B or PALETTE9B_MEASURED)
+        jit = {c: tuple(float(np.clip(v * rng.uniform(0.85, 1.15), 0, 1))
+                       for v in rgb) for c, rgb in pal.items()}
+        light = [float(v + rng.uniform(-0.15, 0.15)) for v in LIGHT]
+        gain = float(rng.uniform(0.75, 1.25))
+        tris = scene_static_tris(paper_rgb=paper or PAPER9B
+                                 or PAPER9B_MEASURED)
+        for b in scene["blocks"]:
+            tris += block_tris({**b, "colour": b["colour"]}, palette=jit)
+        atris, _, _ = arm_tris(q_deg, doc)
+        tris += atris
+        img = rasterize(tris, cam, gain=gain, light=light)
+    sigma = float(rng.uniform(0.0, 0.9))
+    if sigma > 0.05:
+        img = gaussian_filter(img, (sigma, sigma, 0))
+    img = img + rng.normal(0.0, float(rng.uniform(0.0, 5.0)) / 255.0,
+                           img.shape)
+    return (np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8)
 
 
 def run_60(out="runs/vla/6.0", seed=60):

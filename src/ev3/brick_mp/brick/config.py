@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.14
+# brick-sw-version: 5B.17
 """Brick-local JSON config loader.
 
 Reads config/brick.local.json with ujson on the brick (json fallback on
@@ -73,8 +73,11 @@ def _validate(cfg, path, expect=None):
     if expect is not None and brick != expect:
         raise ValueError("brick side mismatch: expected " + expect
                          + ", got " + brick + ": " + str(path))
-    return {
+    out = {
         "brick": brick,
         "motors": list(cfg.get("motors", [])),
         "sensors": list(cfg.get("sensors", [])),
     }
+    if cfg.get("master_bt") is not None:
+        out["master_bt"] = str(cfg.get("master_bt"))
+    return out
