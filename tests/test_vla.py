@@ -369,3 +369,25 @@ def test_summarize_sens_verdicts():
         "red": {"hold_tip": [1.0, 0.0, 60.0]},
         "blue": {"hold_tip": [200.0, 0.0, 60.0]}}})
     assert summarize_sens(follows)["verdict"] == "follows"
+
+
+def test_vla_camera_info_reports_device_state():
+    """Panel device line: number + open/resolution/fps/backend or error.
+
+    Must never raise headless (no camera, no permission, no OpenCV):
+    the closed state is data the panel shows, not a crash.
+    """
+    from src.console.control import vla_camera_info
+
+    info = vla_camera_info()
+    assert info["ok"] is True
+    assert isinstance(info["camera"], int)
+    assert isinstance(info["fake"], list)
+    dev = info["dev"]
+    for key in ("open", "width", "height", "fps", "backend", "error"):
+        assert key in dev, key
+    assert isinstance(dev["open"], bool)
+    if dev["open"]:
+        assert dev["width"] > 0 and dev["height"] > 0
+    else:
+        assert dev["error"]

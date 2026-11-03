@@ -237,6 +237,62 @@ def run_connected(page, base, args, rows):
                  f"{estops}"))
 
 
+def run_vla(page, base, args, rows):
+    """Fake camera -> inference -> preview -> fake-brick send."""
+    page.goto(base + "/")
+    page.wait_for_function("() => !!window._scene", timeout=60000)
+    page.wait_for_function(
+        "() => (document.getElementById('vla-caminfo')"
+        ".textContent || '').length > 0",
+        timeout=60000)
+    page.click("details:has(#wizvla) > summary")
+    rows.append(("vla panel present",
+                 page.is_visible("#wizvla"), ""))
+    page.select_option("#vla-source", "fake")
+    page.click("#vla-run")
+    try:
+        page.wait_for_function(
+            "() => (document.getElementById('vla-msg')"
+            ".textContent || '').includes('추론 완료')",
+            timeout=180000)
+        infer_ok = True
+    except Exception:  # noqa: BLE001 - record, don't crash
+        infer_ok = False
+    info = page.text_content("#vla-info") or ""
+    rows.append(("vla infer: result + slot + time",
+                 infer_ok and page.is_visible("#vla-img") and
+                 "→" in info and "초" in info,
+                 info.strip()[:90]))
+    ghost = page.evaluate(
+        "() => !!(window._scene && window._scene.ghostOn())")
+    rows.append(("vla: ghost preview on connected fake bricks",
+                 ghost, f"ghost={ghost}"))
+    trial = page.text_content("#vla-trial") or ""
+    rows.append(("vla: trial auto-saved",
+                 trial.startswith("trial-"),
+                 trial.strip()[:40]))
+    page.click("#vla-send")
+    try:
+        page.wait_for_function(
+            "() => (document.getElementById('log')"
+            ".textContent || '').includes('VLA 보내기 완료')",
+            timeout=120000)
+        sent = True
+    except Exception:  # noqa: BLE001 - record, don't crash
+        sent = False
+    rows.append(("vla: fake-brick send completes",
+                 sent, ""))
+    page.click("#vla-yes")
+    page.wait_for_function(
+        "() => (document.getElementById('vla-trial')"
+        ".textContent || '').includes('맞음')",
+        timeout=30000)
+    rows.append(("vla: vote recorded",
+                 "맞음" in (page.text_content("#vla-trial") or ""),
+                 ""))
+    page.screenshot(path=f"{args.out}/shot-vla.png")
+
+
 def run_virtual(page, base, args, rows):
     """Offline (virtual-only) server: body follows IK, no send."""
     open_main(page, base)
@@ -314,7 +370,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--out", default="runs/ui_smoke")
-    ap.add_argument("--phase", choices=["connected", "virtual", "tbot"],
+    ap.add_argument("--phase", choices=["connected", "virtual", "tbot", "vla"],
                     default="connected")
     args = ap.parse_args()
 
@@ -337,6 +393,8 @@ def main():
                 run_connected(page, base, args, rows)
             elif args.phase == "tbot":
                 run_tbot(page, base, args, rows)
+            elif args.phase == "vla":
+                run_vla(page, base, args, rows)
             else:
                 run_virtual(page, base, args, rows)
             browser.close()

@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Append-only brick log file (best effort, never raises).
 
 log() prints to the console and appends the same line to brick.log, so

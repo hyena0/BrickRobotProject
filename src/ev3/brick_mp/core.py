@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Shared command executor for the Pybricks bricks.
 
 Pure logic over the motor and sensor objects: validates the id, cmd and
@@ -12,7 +12,6 @@ main loop keeps serving stop and heartbeat traffic while a move runs.
 
 import clock
 import guards
-import version
 
 # Same-goal skip band. Matches motors.SETTLE_ERR_DEG: a new command
 # whose target is already reached never re-triggers run_target.
@@ -20,11 +19,9 @@ SAME_GOAL_ERR_DEG = 2.0
 
 COMMANDS = (
     "ping", "info", "run_target", "run_targets", "run_angle", "read",
-    "reset", "stop", "set_guards", "clear_latch", "set_threshold",
+    "reset", "stop", "set_guards", "clear_latch",
 )
 MOVE_TIMEOUT_MS = 60000
-RETRY_INTERVAL_MS = 1000
-RETRY_MAX = 5
 
 
 class Ack:
@@ -51,7 +48,7 @@ class BrickCore:
     """Executes protocol commands for one brick (ports only)."""
 
     def __init__(self, brick, motors, sensors, motor_types=None,
-                 sensor_types=None, hold_modes=None):
+                 sensor_types=None):
         self.brick = brick
         self.motors = motors
         self.sensors = sensors
@@ -68,9 +65,6 @@ class BrickCore:
         self.guards = guards.SafetyController()
         self.pending_events = []
         self.missing = []
-        self.hold_modes = dict(hold_modes or {})
-        self.port_errors = {}
-        self.retry = {}
         # Boot marker: PC compares uptime_ms across console restarts to
         # tell "same boot, calibration still valid" from "rebooted".
         self.boot_ms = clock.now_ms()
@@ -87,8 +81,6 @@ class BrickCore:
             "encoders": encoders,
             "sensors": values,
             "uptime_ms": clock.diff_ms(clock.now_ms(), self.boot_ms),
-            "port_errors": dict(self.port_errors),
-            "sw_version": version.BRICK_SW_VERSION,
             "latched": self.guards.latched,
             "latch_reason": self.guards.latch_reason,
             "missing": list(self.missing),
@@ -101,17 +93,10 @@ class BrickCore:
                            "type": self.motor_types.get(p, "medium")})
         sensors = []
         for p in sorted(self.sensors):
-            entry = {"port": p,
-                     "type": self.sensor_types.get(p, "touch")}
-            dev = self.sensors[p]
-            if self.sensor_types.get(p) == "color":
-                entry["calibrated"] = bool(
-                    getattr(dev, "calibrated", False))
-                entry["threshold"] = getattr(dev, "_threshold", None)
-            sensors.append(entry)
+            sensors.append({"port": p,
+                            "type": self.sensor_types.get(p, "touch")})
         return {
             "brick": self.brick,
-            "sw_version": version.BRICK_SW_VERSION,
             "motors": motors,
             "sensors": sensors,
         }
@@ -145,8 +130,6 @@ class BrickCore:
             if cmd == "clear_latch":
                 self.guards.clear_latch()
                 return Ack(mid, True, {})
-            if cmd == "set_threshold":
-                return self._set_threshold(args, mid)
             if cmd == "run_target":
                 return self._run_target(args, mid, pump)
             if cmd == "run_targets":
@@ -171,14 +154,7 @@ class BrickCore:
     def _set_guards(self, args, mid):
         rules = []
         for r in args.get("rules", []):
-            sensor = r["sensor"]
-            if self.sensor_types.get(sensor) == "color":
-                dev = self.sensors.get(sensor)
-                if not bool(getattr(dev, "calibrated", False)):
-                    return Ack(mid, False,
-                               error="color sensor not calibrated: "
-                               + str(sensor))
-            rules.append(guards.SensorRule(sensor,
+            rules.append(guards.SensorRule(r["sensor"],
                                            bool(r.get("invert", False))))
         self.guards.configure(rules)
         if "limits" in args:
@@ -199,134 +175,6 @@ class BrickCore:
                 self.guards.clear_limits()
         return Ack(mid, True, {"rules": len(rules),
                                "limits": len(self.guards.limits)})
-
-    def _set_threshold(self, args, mid):
-        port = args["port"]
-        value = float(args["value"])
-        dev = self.sensors.get(port)
-        if dev is None:
-            return Ack(mid, False,
-                       error="unknown sensor: " + str(port))
-        fn = getattr(dev, "set_threshold", None)
-        if fn is None:
-            return Ack(mid, False,
-                       error="sensor has no threshold: " + str(port))
-        fn(value)
-        return Ack(mid, True, {"port": port, "threshold": value,
-                              "calibrated": True})
-
-    def note_port_error(self, port, kind, mtype, exc, threshold=None):
-        """Record a port OSError and park the port for reconnect.
-
-        Only this port stops; a retry entry is (re)armed and the
-        error count, port name and errno go into a port_error event.
-        Nothing latches here: the latch waits for 5 failed retries.
-        """
-        err = str(exc)
-        try:
-            errno = exc.errno
-        except AttributeError:
-            errno = None
-        self.port_errors[port] = self.port_errors.get(port, 0) + 1
-        if port in self.motors:
-            try:
-                self.motors[port].stop()
-            except Exception:
-                pass
-            del self.motors[port]
-        if port in self.sensors:
-            del self.sensors[port]
-        entry = self.retry.get(port)
-        if entry is None:
-            entry = {"kind": kind, "type": mtype, "attempts": 0,
-                     "next_ms": clock.now_ms()}
-        entry["threshold"] = threshold
-        entry["last_error"] = err
-        entry["last_errno"] = errno
-        self.retry[port] = entry
-        self.pending_events.append(
-            guards.GuardEvent("port_error",
-                              {"port": port, "error": err,
-                               "errno": errno,
-                               "count": self.port_errors[port]}))
-
-    def poll_port_retries(self, now_ms, opener):
-        """Reopen parked ports, 1 s apart, at most 5 attempts each.
-
-        opener(port, kind, mtype, threshold) rebuilds the device.
-        Success reinstalls the device and emits port_recovered; the
-        5th failure latches with the port name and errno.
-        """
-        for port in sorted(self.retry):
-            entry = self.retry[port]
-            if clock.diff_ms(now_ms, entry["next_ms"]) < 0:
-                continue
-            try:
-                dev = opener(port, entry["kind"], entry["type"],
-                             entry.get("threshold"))
-            except Exception as exc:
-                entry["attempts"] = entry.get("attempts", 0) + 1
-                entry["next_ms"] = now_ms + RETRY_INTERVAL_MS
-                err = str(exc)
-                try:
-                    errno = exc.errno
-                except AttributeError:
-                    errno = None
-                entry["last_error"] = err
-                entry["last_errno"] = errno
-                self.port_errors[port] = \
-                    self.port_errors.get(port, 0) + 1
-                if entry["attempts"] >= RETRY_MAX:
-                    del self.retry[port]
-                    reason = "port_error:" + str(port) + ":" + err
-                    if errno is not None:
-                        reason = reason + " errno=" + str(errno)
-                    if not self.guards.latched:
-                        self.guards.latched = True
-                        self.guards.latch_reason = reason
-                    self.pending_events.append(
-                        guards.GuardEvent(
-                            "port_error",
-                            {"port": port, "error": err,
-                             "errno": errno,
-                             "count": self.port_errors[port],
-                             "fatal": True}))
-            else:
-                if entry["kind"] == "motor":
-                    self.motors[port] = dev
-                    self.motor_types[port] = entry["type"]
-                else:
-                    self.sensors[port] = dev
-                    self.sensor_types[port] = entry["type"]
-                del self.retry[port]
-                self.pending_events.append(
-                    guards.GuardEvent("port_recovered",
-                                      {"port": port,
-                                       "attempts": entry.get(
-                                           "attempts", 0)}))
-
-    def _settle_hold(self, ports):
-        """Relax the arrival hold for configured no-load ports.
-
-        Ports without an explicit brake/coast mode keep the firmware
-        hold; unknown modes are ignored (safe default).
-        """
-        for port in ports:
-            mode = self.hold_modes.get(port, "hold")
-            if mode != "brake" and mode != "coast":
-                continue
-            motor = self.motors.get(port)
-            if motor is None:
-                continue
-            fn = getattr(motor, "set_hold", None)
-            if fn is None:
-                continue
-            try:
-                fn(mode)
-            except Exception as exc:
-                self.note_port_error(
-                    port, "motor",
-                    self.motor_types.get(port, "medium"), exc)
 
     def _refuse_if_latched(self, mid):
         if self.guards.latched:
@@ -354,8 +202,7 @@ class BrickCore:
         speed = guards.clamp_speed(float(args.get("speed", 60.0)))
         until_sensor = args.get("until_sensor")
         if port not in self.motors:
-            return Ack(mid, False, error="unknown port: " + str(port) + " (known: "
-                           + ",".join(sorted(self.motors)) + ")")
+            return Ack(mid, False, error="unknown port: " + str(port))
         if not self.guards.check_limit(port, target):
             return self._limit_reject(mid, port, target)
         homing = None
@@ -380,7 +227,6 @@ class BrickCore:
         if self.guards.latched:
             return Ack(mid, False,
                        error="guard stop: " + str(self.guards.latch_reason))
-        self._settle_hold([port])
         return Ack(mid, True, {"port": port, "position": motor.position(),
                                "residual": motor.position() - target})
 
@@ -394,8 +240,7 @@ class BrickCore:
         for mv in moves:
             if mv["port"] not in self.motors:
                 return Ack(mid, False,
-                           error="unknown port: " + str(mv["port"]) + " (known: "
-                           + ",".join(sorted(self.motors)) + ")")
+                           error="unknown port: " + str(mv["port"]))
             if not self.guards.check_limit(mv["port"],
                                            float(mv["target"])):
                 return self._limit_reject(mid, mv["port"],
@@ -422,7 +267,6 @@ class BrickCore:
         if self.guards.latched:
             return Ack(mid, False,
                        error="guard stop: " + str(self.guards.latch_reason))
-        self._settle_hold([p for p, tgt in started])
         positions = {}
         residuals = {}
         for p, tgt in started:
@@ -439,14 +283,12 @@ class BrickCore:
         angle = float(args["angle"])
         speed = guards.clamp_speed(float(args.get("speed", 90.0)))
         if port not in self.motors:
-            return Ack(mid, False, error="unknown port: " + str(port) + " (known: "
-                           + ",".join(sorted(self.motors)) + ")")
+            return Ack(mid, False, error="unknown port: " + str(port))
         motor = self.motors[port]
         projected = motor.position() + angle
         if not self.guards.check_limit(port, projected):
             return self._limit_reject(mid, port, projected)
         before, after = motor.run_angle(angle, speed, pump)
-        self._settle_hold([port])
         return Ack(mid, True, {"port": port, "before": before,
                                "after": after,
                                "moved": after - before})
@@ -557,20 +399,12 @@ class BrickCore:
                 return False
 
     def poll_idle_guards(self):
-        """Poll sensor guards outside any move (call from main loops).
-
-        Only safety-rule sensors are read while idle; the motion
-        watch in _supervised_wait still reads everything.
-        """
+        """Poll sensor guards outside any move (call from main loops)."""
         if self.guards.latched:
             return []
-        wanted = {}
-        for rule in self.guards.rules:
-            wanted[rule.sensor] = True
         snapshot = {}
         for p in self.sensors:
-            if p in wanted:
-                snapshot[p] = self.sensors[p].read()
+            snapshot[p] = self.sensors[p].read()
         fresh = self.guards.check_sensors(snapshot, None)
         if fresh:
             self._stop_all()

@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """On-brick safety layer for the Pybricks brick programs.
 
 Same rules as the legacy brick code: sensor guards polled about every

@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Sensor hardware abstraction for the Pybricks bricks.
 
 Ports only (in1 and friends). The brick never learns what a sensor
@@ -44,24 +44,15 @@ class PybricksSensor(Sensor):
 class PybricksColorSensor(Sensor):
     """Color sensor read as binary via a reflection threshold.
 
-    Used for homing-mark detection. Without a measured threshold
-    the sensor is uncalibrated and the core refuses to use it in
-    safety rules. Pass a threshold from wiring or set_threshold.
+    Used for homing-mark detection. The default threshold is an
+    uncalibrated placeholder until the PC side homing measures the
+    mark and table readings on the real robot.
     """
 
-    def __init__(self, port, dev, threshold=None):
+    def __init__(self, port, dev, threshold=50):
         Sensor.__init__(self, port)
         self._dev = dev
-        if threshold is None:
-            self._threshold = 50.0
-            self.calibrated = False
-        else:
-            self._threshold = float(threshold)
-            self.calibrated = True
-
-    def set_threshold(self, value):
-        self._threshold = float(value)
-        self.calibrated = True
+        self._threshold = threshold
 
     def read(self):
         if self._dev.reflection() >= self._threshold:
@@ -69,7 +60,7 @@ class PybricksColorSensor(Sensor):
         return 0
 
 
-def open_sensor(port, sensor_type="touch", threshold=None):
+def open_sensor(port, sensor_type="touch"):
     """Open a real pybricks sensor. Imported lazily for PC side tests."""
     if sensor_type != "touch" and sensor_type != "color":
         raise ValueError("unsupported sensor type: " + str(sensor_type))
@@ -79,7 +70,7 @@ def open_sensor(port, sensor_type="touch", threshold=None):
     if sensor_type == "color":
         from pybricks.ev3devices import ColorSensor
         dev = ColorSensor(getattr(Port, IN_NAMES[port]))
-        return PybricksColorSensor(port, dev, threshold)
+        return PybricksColorSensor(port, dev)
     from pybricks.ev3devices import TouchSensor
     dev = TouchSensor(getattr(Port, IN_NAMES[port]))
     return PybricksSensor(port, dev)

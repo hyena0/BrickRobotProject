@@ -55,7 +55,7 @@ Copy these files flat to the same folder on each brick via VS Code
 - RIGHT brick: same files, run **`right_main.py`** (it reads
   `brick_right.json`; nothing to edit).
 
-Both mains print `brick sw version: 5B.17` as their first line, and
+Both mains print `brick sw version: 5B.18` as their first line, and
 every copied file carries the same `# brick-sw-version:` marker, so a
 stale copy is visible immediately. After any brick-side change: bump
 the version in `version.py` plus all markers, then re-copy all files.
@@ -73,9 +73,8 @@ robot loop.
 
 Connection targets are hardcoded, no input needed on the bricks:
 left connects to PC `192.168.35.151:1883` (`HUB_ADDRESS` in
-`left_main.py`), right connects to the Bluetooth name in `brick_right.json`
-(`master_bt`, default `ev3dev` with a startup warning when
-unset).
+`left_main.py`), right connects to Bluetooth name `ev3dev`
+(`MASTER_BT_NAME` in `right_main.py`).
 
 No editing, no accounts or passwords anywhere: the broker takes
 anonymous clients. Each main reads its own side file

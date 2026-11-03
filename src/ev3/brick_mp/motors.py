@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Motor hardware abstraction for the Pybricks bricks.
 
 Ports only (outA and friends). Real hardware uses pybricks motors;
@@ -52,10 +52,6 @@ class FakeMotor(Motor):
         self._moving = False
         self._target = float(initial)
         self.stopped = False
-        self.hold_mode = "hold"
-
-    def set_hold(self, mode):
-        self.hold_mode = str(mode)
 
     def position(self):
         return self._pos
@@ -145,16 +141,6 @@ class PybricksMotor(Motor):
         self._active = False
         self._dev.brake()
 
-    def set_hold(self, mode):
-        """Relax the arrival hold: brake (passive) or coast.
-
-        Unknown modes keep the firmware hold (safe default).
-        """
-        if mode == "brake":
-            self._dev.brake()
-        elif mode == "coast":
-            self._dev.stop()
-
     def run_angle(self, angle, speed, pump):
         before = float(self._dev.angle())
         self._target = before + float(angle)
@@ -189,12 +175,12 @@ def open_motor(port, motor_type="medium"):
     # program knows where it left off (Pybricks ev3devices docs).
     # Default True would reset every motor to its absolute marker
     # (-180..179) at each program start and force a full recalibration.
+    # Old firmware rejects the kwarg ("extra keyword arguments
+    # given"): fall back to the plain constructor there.
     try:
         dev = PybricksDevMotor(getattr(Port, OUT_LETTERS[port]),
                                reset_angle=False)
     except TypeError:
-        # Old firmware without the reset_angle kwarg: encoders reset
-        # to the absolute marker at boot, so recalibrate afterwards.
         dev = PybricksDevMotor(getattr(Port, OUT_LETTERS[port]))
     # Presence probe: raises OSError on an empty port so build_core
     # can report and skip it instead of crashing later mid-move.

@@ -632,13 +632,152 @@ def test_every_log_line_carries_status_context():
     assert "상태수신전" in ctl.PAGE
 
 
-def test_mode_reports_brick_inventory(handler):
-    status, res = handler.dispatch_api("/api/mode", {})
-    assert status == 200 and res["connected"] is True
-    assert res["identity"] == {"left": "left", "right": "right"}
-    assert "outA" in res["motors"]["left"]
-    assert res["sw_version"]["left"] == res["sw_version"]["right"]
-    assert res["missing"] == {"left": [], "right": []}
+def _i18n_str():
+    import json
+    import re
+    m = re.search(r"const STR = \{(.*?)\n\};", ctl.PAGE, re.S)
+    assert m, "STR dict missing from page script"
+    STR = {}
+    for line in m.group(1).split("\n"):
+        line = line.strip()
+        if not line.startswith('"'):
+            continue  # comment
+        k, _, v = line.partition('": "')
+        # JSON string syntax matches the JS escapes used here.
+        STR[json.loads('"' + k[1:] + '"')] = json.loads(
+            '"' + v[:v.rfind('"')] + '"')
+    return STR
+
+
+def _i18n_tx(STR, text):
+    for key in sorted(STR, key=len, reverse=True):
+        if key in text:
+            text = text.replace(key, STR[key])
+    return text
+
+
+def test_lang_toggle_present():
+    # Toggle button + persisted language + per-page <html lang> switch.
+    assert 'id="langbtn"' in ctl.PAGE
+    assert "console-lang" in ctl.PAGE
+    assert "document.documentElement.lang" in ctl.PAGE
+
+
+def test_i18n_dict_sane():
+    import re
+    STR = _i18n_str()
+    assert len(STR) > 300
+    rawkeys = re.findall(r'^  "((?:[^"\\]|\\.)*)":',
+                         re.search(r"const STR = \{(.*?)\n\};",
+                                   ctl.PAGE, re.S).group(1), re.M)
+    assert len(rawkeys) == len(set(rawkeys))
+    hangul = re.compile(r"[가-힣]")
+    assert all(hangul.search(k) for k in STR)
+    assert not any(hangul.search(v) for v in STR.values())
+
+
+def test_i18n_covers_every_korean_string():
+    # Static chrome: every visible Korean fragment must translate
+    # Hangul-free (text nodes + placeholder/title/alt).
+    import html as _html
+    import re
+    STR = _i18n_str()
+    hangul = re.compile(r"[가-힣]")
+    page = ctl.PAGE
+    body = re.sub(r"<script.*?</script>", " ", page, flags=re.S)
+    for text in re.findall(r">([^<>]+)<", body):
+        text = _html.unescape(text).strip()
+        if text and hangul.search(text):
+            assert not hangul.search(_i18n_tx(STR, text)), text
+    for val in re.findall(
+            r'(?:placeholder|title|alt)="([^"]*)"', page):
+        val = _html.unescape(val)
+        if hangul.search(val):
+            assert not hangul.search(_i18n_tx(STR, val)), val
+    # Dynamic JS: every Korean literal must go through T() (or be the
+    # toggle label / a logic comparison / comment). Audited on the
+    # file bytes: PAGE would already have \n escapes decoded into
+    # real newlines, splitting logical lines.
+    import pathlib
+    raw = pathlib.Path(ctl.__file__).read_text(encoding="utf-8")
+    jsm = re.search(r'<script type="module">(.*?)</script>',
+                    raw, re.S).group(1)
+    for line in jsm.split("\n"):
+        stripped = line.strip()
+        if (not hangul.search(line) or stripped.startswith("//")
+                or stripped.startswith("*")):
+            continue
+        if stripped.startswith('"') and re.match(
+                r'^"[^"]*": "', stripped):
+            continue  # STR entry
+        assert ("T(" in line or "STR" in line
+                or 'indexOf("' in line
+                or stripped == 'if (btn) btn.textContent = en ?'
+                ' "한" : "EN";'), stripped[:100]
+
+
+def test_status_ctx_bilingual_exempt():
+    # Status lines stay unprefixed in both languages, so the EN
+    # translations must join the exemption check.
+    assert "Status baseline" in ctl.PAGE
+    assert "Status changed" in ctl.PAGE
+
+
+def _strip_js_strings_comments(src):
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        two = src[i:i + 2]
+        if two == "//":
+            j = src.find("\n", i)
+            i = n if j < 0 else j + 1
+        elif two == "/*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        elif c in "\"'`":
+            j = i + 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def test_served_script_brackets_balance():
+    # T() wrapping once dropped an if-closing paren that only a real
+    # parse would catch; a balance check is the dependency-free net.
+    import re
+    jsm = re.search(r'<script type="module">(.*?)</script>',
+                    ctl.PAGE, re.S).group(1)
+    code = _strip_js_strings_comments(jsm)
+    depth = {"(": 0, "[": 0, "{": 0}
+    pairs = {")": "(", "]": "[", "}": "{"}
+    for ch in code:
+        if ch in depth:
+            depth[ch] += 1
+        elif ch in pairs:
+            depth[pairs[ch]] -= 1
+            assert depth[pairs[ch]] >= 0, ch
+    assert depth == {"(": 0, "[": 0, "{": 0}, depth
+
+
+def test_served_script_strings_are_single_line():
+    # PAGE is a Python string: file-level \n escapes decode into real
+    # newlines when served, which would break "..." JS strings.
+    # Template literals (backticks) may span lines; "..." may not.
+    import re
+    jsm = re.search(r'<script type="module">(.*?)</script>',
+                    ctl.PAGE, re.S).group(1)
+    segs = jsm.split("`")
+    for idx, seg in enumerate(segs):
+        if idx % 2 == 1:
+            continue  # template literal body
+        for line in seg.split("\n"):
+            code = line.split("//")[0]
+            assert code.count('"') % 2 == 0, code.strip()[:100]
 
 
 def test_m4_dropdown_filled_without_3d():
@@ -646,11 +785,6 @@ def test_m4_dropdown_filled_without_3d():
     # (3D viewer) never runs; renderHoming must fill it from the
     # homing spec, or no joint can ever be selected.
     assert "w4-joint options" in ctl.PAGE
-
-
-def test_diag_shows_brick_inventory():
-    assert "brickInv" in ctl.PAGE
-    assert "미연결" in ctl.PAGE
 
 
 def test_homing_section_offers_mark_all():

@@ -1,4 +1,4 @@
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Bluetooth mailbox link between the bricks (left brick is server).
 
 Boxes carry JSON text: cmd goes master to slave, reply, state and evt

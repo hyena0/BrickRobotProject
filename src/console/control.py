@@ -1192,40 +1192,21 @@ class _Handler(mini._Handler):
         if path == "/api/mode":
             # virtual: fake bricks (send allowed for demo).
             # connected: both bricks answer reads.
-            # identity/motors/missing/sw_version come from the brick
-            # read snapshot, so a wrong or stale brick copy is
-            # visible here (which config it runs, which ports it
-            # knows, which devices are unplugged).
             bricks = {}
-            identity = {}
-            motors = {}
-            missing = {}
-            sw_version = {}
             for brick in self.transport.bricks:
                 try:
-                    state = self.transport.send(brick, "read")
+                    self.transport.send(brick, "read")
                     bricks[brick] = True
-                    state = state or {}
-                    identity[brick] = state.get("brick", brick)
-                    motors[brick] = sorted(
-                        (state.get("encoders") or {}).keys())
-                    missing[brick] = list(state.get("missing") or [])
-                    if state.get("sw_version"):
-                        sw_version[brick] = state.get("sw_version")
                 except Exception:
                     bricks[brick] = False
             connected = bool(bricks) and all(bricks.values())
             if getattr(self, "robot", "mrjos") == "tbot":
                 # Virtual-only: never report brick connection.
                 return {"ok": True, "robot": "tbot", "virtual": True,
-                        "connected": False, "bricks": {},
-                        "identity": {}, "motors": {}, "missing": {},
-                        "sw_version": {}}
+                        "connected": False, "bricks": {}}
             return {"ok": True,
                     "virtual": bool(getattr(self, "virtual", False)),
-                    "connected": connected, "bricks": bricks,
-                    "identity": identity, "motors": motors,
-                    "missing": missing, "sw_version": sw_version}
+                    "connected": connected, "bricks": bricks}
         if path == "/api/home_joint":
             return home_joint(self, str(args.get("joint", "")),
                               mark=bool(args.get("mark", False)))
@@ -1339,6 +1320,21 @@ class _Handler(mini._Handler):
                               speed=_cs.PARK_SPEED_DPS,
                               label="twin-rest")
             return {"ok": True, "move": res}
+        if path == "/api/vla/camera":
+            return vla_camera_info()
+        if path == "/api/vla/infer":
+            out = vla_infer(str(args.get("source", "real")),
+                            str(args.get("target", "red")),
+                            str(args.get("task", "") or ""),
+                            str(args.get("ckpt", "ft9b")),
+                            args.get("fake_index", 0))
+            return out
+        if path == "/api/vla/trial/save":
+            return vla_trial_save(str(args.get("instruction", "")),
+                                  str(args.get("ckpt", "ft9b")))
+        if path == "/api/vla/trial/vote":
+            return vla_trial_vote(str(args.get("id", "")),
+                                  bool(args.get("correct", False)))
         if path == "/api/verify_report":
             import pathlib as _pl
             root = _pl.Path(__file__).resolve().parents[2]
@@ -1580,6 +1576,304 @@ class OfflineTransport:
         pass
 
 
+#: VLA webcam panel (server side). Capture is OpenCV-only; the frame
+#: preprocessing (center-square crop -> 256) matches training.
+VLA_CKPTS = {
+    "ft9b": "runs/vla/ckpt-ft9b/pretrained_model",
+    "6000": "runs/vla/ckpt-last",
+}
+_VLA_POLICIES = {}
+_VLA_LAST = {}
+
+
+def webcam_config():
+    """Camera number from config/webcam.local.yaml (default 0)."""
+    import yaml
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    try:
+        data = yaml.safe_load(
+            (root / "config" / "webcam.local.yaml").read_text(
+                encoding="utf-8")) or {}
+        return int(data.get("camera", 0))
+    except (OSError, ValueError, ImportError, TypeError):
+        return 0
+
+
+def vla_fake_photos():
+    """Saved real photos usable as a fake camera (no webcam needed)."""
+    import pathlib as _pl
+
+    root = _pl.Path(__file__).resolve().parents[2]
+    return sorted(p.name for p in
+                  (root / "runs" / "stage9" / "real").glob("batch_*.png")
+                  if not p.name.endswith(".full.png"))
+
+
+def vla_probe_device():
+    """Open the configured webcam once and report its state.
+
+    Returns dict with open/width/height/fps/backend/error. Never
+    raises: a missing camera or missing permission is data, shown
+    in the panel so the user can tell whether capture will work.
+    """
+    dev = {"open": False, "width": 0, "height": 0, "fps": 0.0,
+           "backend": "", "error": ""}
+    try:
+        import cv2 as _cv2
+    except ImportError:
+        dev["error"] = "OpenCV 없음"
+        return dev
+    cap = None
+    try:
+        cap = _cv2.VideoCapture(webcam_config())
+        if not cap.isOpened():
+            dev["error"] = ("카메라 열기 실패: 번호 %d, macOS 카메라 권한 "
+                            "(설정 > 개인 정보 보호 및 보안 > 카메라) 확인"
+                            % webcam_config())
+            return dev
+        dev["backend"] = cap.getBackendName()
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            dev["error"] = ("카메라 프레임 없음: 번호 %d, 다른 앱 사용 중 "
+                            "확인" % webcam_config())
+            return dev
+        h, w = frame.shape[:2]
+        dev.update({"open": True, "width": int(w), "height": int(h),
+                    "fps": round(float(cap.get(_cv2.CAP_PROP_FPS)), 1)})
+        return dev
+    except Exception as exc:  # noqa: BLE001 - state, not a crash
+        dev["error"] = "카메라 확인 실패: %s" % exc
+        return dev
+    finally:
+        if cap is not None:
+            cap.release()
+
+
+def vla_camera_info():
+    """Sources for the panel select + live device info/state."""
+    return {"ok": True, "camera": webcam_config(),
+            "fake": vla_fake_photos(), "dev": vla_probe_device()}
+
+
+def vla_policy(ckpt_key):
+    """Load each checkpoint once per server process, then reuse."""
+    import torch
+    from lerobot.policies import make_pre_post_processors
+    from lerobot.policies.smolvla.modeling_smolvla import (
+        SmolVLAPolicy)
+    from src.vla.local_infer import RENAME_MAP
+
+    key = ckpt_key if ckpt_key in VLA_CKPTS else "ft9b"
+    if key not in _VLA_POLICIES:
+        ckpt_dir = VLA_CKPTS[key]
+        policy = SmolVLAPolicy.from_pretrained(ckpt_dir)
+        policy.eval()
+        if torch.cuda.is_available():
+            device_name = "cuda"
+        else:
+            device_name = "cpu"
+            policy = policy.to(device_name)
+        preprocessor, postprocessor = make_pre_post_processors(
+            policy.config, pretrained_path=ckpt_dir,
+            preprocessor_overrides={
+                "rename_observations_processor": {
+                    "rename_map": RENAME_MAP},
+                "device_processor": {"device": device_name},
+            })
+        _VLA_POLICIES[key] = (policy, preprocessor, postprocessor)
+    return _VLA_POLICIES[key]
+
+
+def vla_capture(source, fake_index=0):
+    """One 256x256 frame: real webcam (OpenCV) or saved real photo."""
+    import numpy as _np
+    from PIL import Image as _Image
+    import pathlib as _pl
+
+    if source == "fake":
+        photos = vla_fake_photos()
+        if not photos:
+            raise ValueError("가짜 사진 없음: runs/stage9/real/ 비어 있음")
+        name = photos[int(fake_index or 0) % len(photos)]
+        img = _Image.open(_pl.Path(__file__).resolve().parents[2] /
+                          "runs" / "stage9" / "real" / name).convert("RGB")
+        return _np.asarray(img), "fake:" + name
+    import cv2 as _cv2
+
+    cap = _cv2.VideoCapture(webcam_config())
+    if not cap.isOpened():
+        raise ValueError("카메라 열기 실패: 번호 %d, macOS 카메라 권한 "
+                         "(설정 > 개인 정보 보호 및 보안 > 카메라)을 "
+                         "확인하세요" % webcam_config())
+    ok, frame = cap.read()
+    cap.release()
+    if not ok or frame is None:
+        raise ValueError("카메라 프레임 없음: 번호 %d, 다른 앱이 "
+                         "카메라를 쓰고 있는지 확인하세요"
+                         % webcam_config())
+    rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
+    h, w = rgb.shape[:2]
+    side = min(h, w)
+    top, left = (h - side) // 2, (w - side) // 2
+    crop = _Image.fromarray(rgb[top:top + side,
+                                left:left + side]).resize((256, 256))
+    return _np.asarray(crop), "cam:%d" % webcam_config()
+
+
+def vla_annotate(img_u8, tip_px, slot, dist_mm):
+    """Draw the VLA tip projection + nearest slot on the frame."""
+    import io as _io
+    import base64 as _b64
+    import numpy as _np
+    from PIL import Image as _Image
+    from PIL import ImageDraw as _Draw
+
+    from src.vla.scene import SLOT_IDS
+    img = _Image.fromarray(_np.asarray(img_u8, dtype=_np.uint8))
+    d = _Draw.Draw(img)
+    tx = max(0, min(255, int(tip_px[0])))
+    ty = max(0, min(255, int(tip_px[1])))
+    r = 8
+    d.ellipse([tx - r, ty - r, tx + r, ty + r], outline=(255, 0, 0),
+              width=3)
+    d.text((tx + r + 2, ty - r), "VLA", fill=(255, 0, 0))
+    for (sx, sy), sid in SLOT_IDS.items():
+        w = 3 if sid == slot else 1
+        col = (0, 255, 0) if sid == slot else (255, 255, 255)
+        d.rectangle([sx - 8, sy - 8, sx + 8, sy + 8], outline=col,
+                    width=w)
+        if sid == slot:
+            d.text((sx + 10, sy - 14), "%s %.0fmm" % (sid, dist_mm),
+                   fill=(0, 255, 0))
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return _b64.b64encode(buf.getvalue()).decode()
+
+
+def vla_infer(source, target, task, ckpt_key, fake_index=0):
+    """Capture -> preprocess -> shared drain -> hold pose + overlay."""
+    import math as _math
+    import time as _time
+
+    from src.kin.fk import fk_model
+    from src.kin.model import load_model
+    from src.vla.drain import N_STEPS, drain_chunk
+    from src.vla.scene import SLOT_IDS
+
+    policy, pre, post = vla_policy(ckpt_key)
+    key = ckpt_key if ckpt_key in VLA_CKPTS else "ft9b"
+    img, origin = vla_capture(source, fake_index)
+    assert tuple(img.shape) == (256, 256, 3), img.shape
+    rep = json.loads((pathlib.Path(__file__).resolve().parents[2] /
+                      "runs" / "vla" / "6.0" / "report.json")
+                     .read_text(encoding="utf-8"))
+    rest_q = [float(v) for v in rep["rest_q_deg"]]
+    text = (task.strip() or
+            "Point to the %s block." % (target or "red"))
+    t1 = _time.monotonic()
+    stacked, info = drain_chunk(policy, pre, post, img, rest_q, text,
+                                n=N_STEPS, state_source="command")
+    infer_s = _time.monotonic() - t1
+    if stacked.shape != (50, 6):
+        raise ValueError("VLA drain broken: %s" % (stacked.shape,))
+    hold = [float(v) for v in stacked[-1]]
+    doc = load_model(str(pathlib.Path(__file__).resolve().parents[2] /
+                           "models" / "robot_inferred.json"))
+    tcp = fk_model(hold, tip_doc(doc))["pos_mm"]
+    best, best_d = None, 1e18
+    for (sx, sy), sid in SLOT_IDS.items():
+        dd = (tcp[0] - sx) ** 2 + (tcp[1] - sy) ** 2
+        if dd < best_d:
+            best, best_d = sid, dd
+    dist = _math.sqrt(best_d)
+    png = vla_annotate(img, vla_project_tip(tcp), best, dist)
+    _VLA_LAST.update({"img": img, "origin": origin, "text": text,
+                      "ckpt": key, "hold_q": hold, "slot": best,
+                      "dist_mm": round(dist, 1), "infer_s": infer_s,
+                      "state_source": info["state_source"]})
+    return {"ok": True, "origin": origin, "task": text, "ckpt": key,
+            "hold_q": {j: hold[i] for i, j in
+                       enumerate(["J1", "J2", "J3", "J4", "J5", "J6"])},
+            "tcp_mm": [round(float(v), 1) for v in tcp],
+            "slot": best, "dist_mm": round(dist, 1),
+            "infer_s": round(infer_s, 1),
+            "state_source": info["state_source"], "png": png}
+
+
+def vla_project_tip(tcp):
+    """Project the hold-pose tip into 256px camera coords (sim camera)."""
+    import numpy as _np
+
+    from src.vla.scene import cam_frame, load_camera
+    cam = load_camera()
+    eye, _right, _up, _fwd, f = cam_frame(cam)
+    p = _np.array([tcp[0], tcp[1], tcp[2]], float) - eye
+    u, v = _project(p, cam, f)
+    return [float(u), float(v)]
+
+
+def _project(p, cam, f):
+    """Pinhole projection with the sim camera frame (overlay-aligned)."""
+    import numpy as _np
+
+    from src.vla.scene import cam_frame
+    eye, right, up, fwd, _f = cam_frame(cam)
+    z = float(_np.dot(p, fwd))
+    if z <= 1e-9:
+        return 128.0, 128.0
+    cx, cy = cam["image_px"][0] / 2.0, cam["image_px"][1] / 2.0
+    return cx + f * float(_np.dot(p, right)) / z, \
+        cy - f * float(_np.dot(p, up)) / z
+
+
+def vla_trial_save(instruction, ckpt_key):
+    """Save last inference (frame + verdict pending) to console_trials/."""
+    import datetime as _dt
+    import pathlib as _pl
+
+    if "img" not in _VLA_LAST:
+        raise ValueError("먼저 캡처 -> 추론을 실행하세요")
+    root = _pl.Path(__file__).resolve().parents[2]
+    outdir = root / "runs" / "stage9" / "console_trials"
+    outdir.mkdir(parents=True, exist_ok=True)
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    from PIL import Image as _Image
+    import numpy as _np
+    _Image.fromarray(_np.asarray(_VLA_LAST["img"],
+                                dtype=_np.uint8)).save(
+        outdir / ("trial-%s.png" % stamp))
+    rec = {"id": "trial-" + stamp, "time": stamp,
+           "instruction": instruction, "ckpt": ckpt_key,
+           "origin": _VLA_LAST.get("origin"),
+           "task": _VLA_LAST.get("text"),
+           "hold_q": _VLA_LAST.get("hold_q"),
+           "slot": _VLA_LAST.get("slot"),
+           "dist_mm": _VLA_LAST.get("dist_mm"),
+           "infer_s": _VLA_LAST.get("infer_s"),
+           "state_source": _VLA_LAST.get("state_source"),
+           "verdict": None}
+    (outdir / ("trial-%s.json" % stamp)).write_text(
+        json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"ok": True, "id": rec["id"]}
+
+
+def vla_trial_vote(trial_id, correct):
+    """Record human 맞음/틀림 on a saved trial."""
+    import pathlib as _pl
+
+    root = _pl.Path(__file__).resolve().parents[2]
+    path = root / "runs" / "stage9" / "console_trials" / \
+        ("%s.json" % trial_id)
+    if not path.exists():
+        raise ValueError("trial 없음: " + trial_id)
+    rec = json.loads(path.read_text(encoding="utf-8"))
+    rec["verdict"] = bool(correct)
+    path.write_text(json.dumps(rec, ensure_ascii=False, indent=1),
+                    encoding="utf-8")
+    return {"ok": True, "id": trial_id, "verdict": rec["verdict"]}
+
+
 def build_transport(config, offline=False):
     if offline:
         return OfflineTransport()
@@ -1611,6 +1905,11 @@ def main(argv=None) -> None:
                         help="console robot (tbot is virtual-only)")
     args = parser.parse_args(argv)
     transport = build_transport(args.config, offline=args.offline)
+    try:
+        vla_policy("ft9b")
+        print("vla: checkpoint ft9b preloaded")
+    except Exception as e:  # noqa: BLE001 - lazy load on first infer
+        print("vla: preload skipped (%s), loads on first infer" % e)
     server = create_server(transport, port=args.port,
                            private_visuals=args.private_visuals,
                            virtual=args.offline or args.config is None,
@@ -1687,6 +1986,7 @@ body[data-page="main"] #view3d { position: absolute; inset: 0;
      style="display:none">보정 페이지에서 호밍하세요</a>
   <button id="estop">E-STOP</button>
   <button id="btn-clear">래치 해제</button>
+  <button id="langbtn" title="언어">EN</button>
 </div>
 <main>
 <div id="viewwrap" data-sec="main"><canvas id="view3d"></canvas>
@@ -1744,6 +2044,24 @@ Z<input id="xyz-z" size="6"> <button id="xyz-go">목표로</button><br>
 <div id="twin-msg">대기 중</div>
 <div><button id="twin-send" disabled>유지 자세로 보내기 (저속)</button>
 <button id="twin-rest">휴식 자세로</button></div>
+</div>
+</details>
+<details><summary>VLA 웹캠 (실시간 지시 → 유지 자세)</summary>
+<div class="wiz" id="wizvla">
+<div>카메라 <select id="vla-source"><option value="real">실제 카메라</option><option value="fake">가짜 사진</option></select>
+<span id="vla-caminfo"></span></div>
+<div>지시 <select id="vla-target"><option value="red">빨강</option><option value="green">초록</option><option value="yellow">노랑</option><option value="blue">파랑</option></select>
+<input id="vla-task" size="28" placeholder="문장 지시 (비우면 색 기준)">
+체크포인트 <select id="vla-ckpt"><option value="ft9b">미세조정 후</option><option value="6000">전 (6,000)</option></select></div>
+<div><button id="vla-run">캡처 → 추론</button>
+<span id="vla-msg">대기 중</span></div>
+<div><img id="vla-img" style="max-width:100%;display:none" alt="VLA 결과"></div>
+<div id="vla-info"></div>
+<div><button id="vla-send" disabled>로봇으로 보내기 (저속)</button>
+<button id="vla-rest">휴식 자세로</button>
+<button id="vla-yes" disabled>맞음</button>
+<button id="vla-no" disabled>틀림</button>
+<span id="vla-trial"></span></div>
 </div>
 </details>
 <details><summary>데모 순서</summary>
@@ -1835,8 +2153,459 @@ import { TransformControls } from
   "three/addons/controls/TransformControls.js";
 
 window.addEventListener("error", (e) => {
-  document.getElementById("glerr").textContent = "오류: " + e.message;
+  document.getElementById("glerr").textContent = T("오류: ") + e.message;
 });
+
+// UI language: Korean source strings are translated to English at
+// display time. Static markup is swapped by applyLang(); dynamic
+// strings go through T(). Default Korean; toggle persists.
+let LANG = "ko";
+try {
+  if (window.localStorage.getItem("console-lang") === "en") LANG = "en";
+} catch (err) { /* private mode: stay Korean */ }
+const STR = {
+  // Top bar + view menu.
+  "메인": "Main",
+  "보정": "Calibration",
+  "검증": "Verify",
+  "모드": "Mode",
+  "좌:": "L:",
+  "우:": "R:",
+  "래치": "Latch",
+  "하트비트": "Heartbeat",
+  "호밍": "Homing",
+  "호밍: ": "Homing: ",
+  "로봇 연결됨(가짜)": "Robot connected (fake)",
+  "로봇 연결됨": "Robot connected",
+  " 저장 실패": " save failed",
+  "안됨": "not yet",
+  "됨(": "done (",
+  "유지 자세로 보내기": "Send hold pose",
+  "보정 확정됨(": "Calibration confirmed (",
+  "흐름=": "flow=",
+  "jog 실패: ": "jog failed: ",
+  " / 거리 ": " / distance ",
+  "로봇": "Robot",
+  "로딩…": "Loading…",
+  "보정 페이지에서 호밍하세요": "Please home on the calibration page",
+  "래치 해제": "Release latch",
+  "래치 해제됨": "Latch released",
+  "래치 해제 실패: ": "Latch release failed: ",
+  "표시:": "Show:",
+  "매트": "Mat",
+  "기즈모": "Gizmo",
+  "TCP→목표": "TCP→target",
+  "도달범위": "Reach",
+  "이전자세": "Previous pose",
+  "실측겹침": "Overlay",
+  "손목방향": "Wrist dir",
+  "모델": "Model",
+  "기본 도형": "Primitives",
+  "LDraw 메시(비공개)": "LDraw mesh (private)",
+  "화면 맞춤": "Fit view",
+  "이동": "Move",
+  "회전": "Rotate",
+  // Target + IK + execute row.
+  "매트 목표": "Mat target",
+  "좌표(mm)": "Coords (mm)",
+  "집게가 아래를 향함 (위치+집게 방향)": "Gripper faces down (position+gripper)",
+  "기즈모를 TCP로": "Gizmo to TCP",
+  "닿는 목표": "Reachable target",
+  "타겟→현재EE": "Target→current EE",
+  "실행": "Run",
+  "수렴": "Converged",
+  "미수렴(최근접)": "Not converged (nearest)",
+  "(최근접 추종)": "(nearest follow)",
+  "(테이블 클램프)": "(table clamp)",
+  "오차": "err",
+  "제한": "limits",
+  "없음": "none",
+  "목표(베이스)": "Target (base)",
+  "목표(테이블)": "Target (table)",
+  "목표로": "Set target",
+  "목표": "Target",
+  "미리보기 확인 후": "After checking the preview",
+  "로봇으로 보내기": "Send to robot",
+  "정지": "Stop",
+  "대기 중": "Idle",
+  // Twin.
+  "디지털 트윈 (실물 블록 → 가상 이미지 → VLA)": "Digital twin (real blocks → virtual image → VLA)",
+  "실물 블록을 슬롯 S1~S6에만 놓고, 색을 아래에 입력. 실물 카메라는 쓰지 않음.": "Place real blocks only on slots S1–S6 and enter colours below. No real camera used.",
+  "색 저장": "Save colours",
+  "색 저장됨": "Colours saved",
+  "트윈 실행": "Run twin",
+  "가상 이미지": "Virtual image",
+  "유지 자세로 보내기 (저속)": "Send hold pose (slow)",
+  "휴식 자세로": "Rest pose",
+  "휴식 자세 이동 완료": "Moved to rest pose",
+  "휴식 자세로 저속 이동할까요?": "Move to the rest pose at low speed?",
+  // VLA webcam.
+  "VLA 웹캠 (실시간 지시 → 유지 자세)": "VLA webcam (live instruction → hold pose)",
+  "카메라": "Camera",
+  "실제 카메라": "Real camera",
+  "가짜 사진": "Fake photos",
+  "지시": "Instruction",
+  "빨강": "Red",
+  "초록": "Green",
+  "노랑": "Yellow",
+  "파랑": "Blue",
+  "문장 지시 (비우면 색 기준)": "Sentence instruction (blank = by colour)",
+  "체크포인트": "Checkpoint",
+  "미세조정 후": "After fine-tune",
+  "전 (6,000)": "Before (6,000)",
+  "캡처 → 추론": "Capture → infer",
+  "로봇으로 보내기 (저속)": "Send to robot (slow)",
+  "맞음": "Correct",
+  "틀림": "Wrong",
+  "추론 중…": "Inferring…",
+  "추론 완료": "Inference done",
+  "추론": "Inference",
+  // Demo.
+  "데모 순서": "Demo sequence",
+  "호밍 확인 → 안전자세 2개 → 매트 점(아래 번호) → 원위치. 느리게, 한 단계씩 확인.": "Check homing → 2 safe poses → mat points (numbers below) → back. Slowly, confirm each step.",
+  "매트 점": "Mat points",
+  "데모 순서 시작": "Start demo",
+  // Joints / diag / log chrome.
+  "관절·모터·IK": "Joints · motors · IK",
+  "실시간 관절값 반영": "Live joint values",
+  "주황 구슬을 드래그하면 뼈대가 따라옵니다": "Drag the orange ball and the skeleton follows",
+  "관절": "Joint",
+  "관절각": "Joint angle",
+  "모터각": "Motor angle",
+  "홈": "Homed",
+  "방향": "Direction",
+  "센서": "Sensor",
+  "조그": "Jog",
+  "브릭/포트": "Brick/port",
+  "완료": "done",
+  "미완": "incomplete",
+  "확인됨": "confirmed",
+  "방향 미확인": "Direction unconfirmed",
+  "연결": "connected",
+  "끊김": "disconnected",
+  "걸림": "engaged",
+  "읽김": "unread",
+  "상태기준 연결=": "Status baseline connected=",
+  "상태변경 연결=": "Status changed connected=",
+  " 래치=": " latch=",
+  "상태수신전": "Waiting for status",
+  "하트비트: 실패": "Heartbeat: failed",
+  "초 전 갱신": "s ago",
+  "하트비트: ": "Heartbeat: ",
+  "E-STOP 전송됨": "E-STOP sent",
+  "E-STOP 실패: ": "E-STOP failed: ",
+  "정지(E-STOP) 전송됨": "Stop (E-STOP) sent",
+  "정지 실패: ": "Stop failed: ",
+  "로그": "Log",
+  // Calibration page.
+  "세션 보정 (호밍 반복 생략용)": "Session calibration (skip homing)",
+  "한 번에 보정": "Calibrate all",
+  "주차 (저속 이동+저장)": "Park (slow move+save)",
+  "주차 자세에서 복원": "Restore from park",
+  "확인 자세로 이동": "Go to check pose",
+  "맞음 (보정 확정)": "Correct (confirm calibration)",
+  "관절별 호밍. J5/J6은 표시 맞춤(현재 위치를 0으로 기록). 손목 기준 그림:": "Home each joint. J5/J6 align by marking (record current position as 0). Wrist reference:",
+  "손목 기준": "Wrist reference",
+  "VLA 결과": "VLA result",
+  "전부 0으로": "Zero all",
+  "메인으로 돌아가기": "Back to main",
+  "M4 방향 마법사": "M4 direction wizard",
+  "+5° 시도": "+5° try",
+  "반대": "Reverse",
+  "M5 범위 마법사": "M5 range wizard",
+  "M6 자세 재현": "M6 pose replay",
+  "재현": "Replay",
+  "포트 진단": "Port diagnostics",
+  "설정(경계값)": "Settings (limits)",
+  // Verify page + misc chrome.
+  "IK 시험 결과": "IK test results",
+  "GT 뼈대 비교는 --private-visuals일 때만 표시됩니다.": "GT skeleton comparison only with --private-visuals.",
+  "로봇 전환 실패: ": "Robot switch failed: ",
+  "테이블 설정 로드 실패, 기본값 사용": "Table config load failed, using defaults",
+  "LDraw 메시 없음(기본 도형 유지)": "No LDraw mesh (keeping primitives)",
+  "LDraw 메시 로딩 중…": "Loading LDraw mesh…",
+  "LDraw 링크 없음 (기본 도형 유지)": "No LDraw link (keeping primitives)",
+  "LDraw 메시 로드 완료": "LDraw mesh loaded",
+  "LDraw 메시": "LDraw mesh",
+  "메시 로드 실패: ": "Mesh load failed: ",
+  " (기본 도형 유지)": " (keeping primitives)",
+  "오류: ": "Error: ",
+  "OpenCV 없음": "No OpenCV",
+  // Common verbs / outcomes.
+  "실패: ": "Failed: ",
+  "실패(거부): ": "Failed (refused): ",
+  "거부: ": "Refused: ",
+  "거부": "refused",
+  "취소": "cancel",
+  "취소됨": "cancelled",
+  "중단: ": "Aborted: ",
+  "미완료": "incomplete",
+  "확인": "Confirm",
+  "저장": "Save",
+  "저장됨": "saved",
+  "기록": "Record",
+  "설정": "Settings",
+  "적용": "Apply",
+  "로드": "Load",
+  // Send / twin / VLA flow.
+  "전송": "send",
+  "전송됨": "sent",
+  "보내기": "Send",
+  "트윈 전송: ": "Twin send: ",
+  "트윈 전송 대기(다시 누르면 전송)": "Twin send armed (press again to send)",
+  "다시 누르면 저속(15도/s)으로 전송": "Press again to send at slow speed (15°/s)",
+  "유지 자세 없음(트윈 실행 먼저)": "No hold pose (run twin first)",
+  "유지=": "hold=",
+  "정책=": "policy=",
+  "트윈 실행: 정책=": "Twin run: policy=",
+  "트윈 휴식: ": "Twin rest: ",
+  "유지 자세 이동 완료, 최대오차 ": "Hold pose move done, max error ",
+  "VLA 추론: ": "VLA inference: ",
+  "VLA 추론 실패: ": "VLA inference failed: ",
+  "VLA 보내기 실패: ": "VLA send failed: ",
+  "VLA 보내기 완료": "VLA send done",
+  "VLA 판정: ": "VLA verdict: ",
+  "VLA 휴식: ": "VLA rest: ",
+  "로봇으로 보내기 실패: ": "Send-to-robot failed: ",
+  "로봇으로 보내기 완료": "Sent to robot",
+  "보내기 거부: ": "Send refused: ",
+  "보내기 취소(대이동 확인 거부)": "Send cancelled (large-move confirm refused)",
+  "보내기 취소(호밍 미완료 확인 거부)": "Send cancelled (homing-incomplete confirm refused)",
+  "대이동": "large move",
+  "이동량": "travel",
+  "브릭이 연결되지 않아 보낼 수 없습니다": "Bricks are not connected, cannot send",
+  "호밍 안 됨(": "Homing incomplete (",
+  "): 그래도 VLA 자세를 보내시겠습니까?": "): send the VLA pose anyway?",
+  "이동량 ": "Travel ",
+  "°: 저속으로 이동할까요?": "°: move at low speed?",
+  "보내기 가능 (저속 ": "Ready to send (slow ",
+  "경고: 호밍 미완료(": "Warning: homing incomplete (",
+  ") — 클릭 시 확인 후 전송 (저속 ": ") — confirm at click, then send (slow ",
+  "호밍 미완료 관절: ": "Homing incomplete joints: ",
+  "\\n보정 없이 저속으로 보낼까요?": "\\nSend at low speed without calibration?",
+  "한 관절이 ": "One joint moves ",
+  "° 움직입니다. 진행할까요?": "°. Proceed?",
+  "유효한 미리보기 없음": "No valid preview",
+  "범위 위반: ": "Range violation: ",
+  "범위 ": "Range ",
+  "(저속 ": "(slow ",
+  "미리보기": "Preview",
+  "본체": "body",
+  " | 가상 추종(본체 이동)": " | virtual follow (body move)",
+  // IK / motor messages.
+  "IK 실패: ": "IK failed: ",
+  "IK 상태: ": "IK status: ",
+  "IK 수렴": "IK converged",
+  "IK 수렴 위치오차": "IK converged, position error",
+  "위치오차 ": "position error ",
+  "자세오차 ": "orientation error ",
+  " / 오차 ": " / error ",
+  " / 제한 ": " / limits ",
+  " / 목표(테이블) [": " / target (table) [",
+  "모터 미리보기: ": "Motor preview: ",
+  " / 범위: ": " / range: ",
+  "모터 ": "Motor ",
+  " | 범위 ": " | range ",
+  " | 모터 ": " | motors ",
+  "미리보기 표시 실패": "Preview display failed",
+  "미리보기 실패: ": "Preview failed: ",
+  "GT 표시 불가: ": "GT display unavailable: ",
+  "IK 상태 표시 실패: ": "IK status display failed: ",
+  "기즈모를 현재 TCP로 이동": "Move gizmo to current TCP",
+  "닿는 목표 실패: ": "Reachable-target failed: ",
+  "닿는 목표: [": "Reachable target: [",
+  "매트 없음(비공개)": "No mat (private)",
+  "매트 ": "Mat ",
+  "가상 이미지 생성+VLA 추론 중…": "Generating virtual image + VLA inference…",
+  // Homing wizard.
+  "결과: ": "Result: ",
+  "0으로 표시됨(offset ": "marked as 0 (offset ",
+  "미실행: ": "Not executed: ",
+  "이동: 요청 ": "Move: requested ",
+  "각도": "angle",
+  "각도로 이동": "Go by angle",
+  "각도 입력이 숫자가 아닙니다": "Angle input is not a number",
+  "현재를 0으로": "Set current as 0",
+  "전 관절 각도 필요: ": "All joint angles needed: ",
+  "이동 완료, 최대오차 ": "Move done, max error ",
+  "호밍 수동이동 ": "Homing manual move ",
+  "호밍 명세 실패: ": "Homing spec failed: ",
+  "호밍 명세": "Homing spec",
+  "호밍 로드 실패": "Homing load failed",
+  "현재 자세를 전 관절의 0으로 기록할까요?": "Record the current pose as 0 for all joints?",
+  "전부 0으로 취소됨": "Zero-all cancelled",
+  "전부 0으로 기록됨": "Zero-all recorded",
+  "전부 0으로: ": "Zero-all: ",
+  "상태 조회 실패": "Status query failed",
+  // M4/M5/M6 + settings + sessions.
+  "정방향 확정": "forward confirmed",
+  "모델과 실물을 비교하세요": "Compare the model with the hardware",
+  "반대 → 부호 뒤집어 저장됨(비율 ": "reversed → sign flipped and saved (ratio ",
+  "비율": "ratio",
+  "이동: 요청 {a}도, 실이동 {b}도": "Move: requested {a}°, actual {b}°",
+  "이동 완료, 최대오차 {x}도": "Move done, max error {x}°",
+  "5A 시뮬": "5A sim",
+  "실측[lo,hi]": "measured [lo,hi]",
+  "채택": "adopted",
+  "(실측)": "(measured)",
+  "(시뮬)": "(sim)",
+  "여유 ": "margin ",
+  " (최대±5mm)": " (max ±5mm)",
+  " (최대±5°)": " (max ±5°)",
+  "lo로": "as lo",
+  "hi로": "as hi",
+  " 기록: ": " recorded: ",
+  "패키지 ": "package ",
+  "자세 로드 실패: ": "Pose load failed: ",
+  "자세": "Pose",
+  "목표각": "Target angle",
+  "최근 오차": "Recent error",
+  "이전 자세 표시 실패": "Previous-pose display failed",
+  "재현 완료, 최대오차 ": "replay done, max error ",
+  "설정 로드 실패: ": "Settings load failed: ",
+  "항목": "Item",
+  "값": "Value",
+  "변경": "Change",
+  "패키지 여유 ": "Package margin ",
+  "°, 속도 상한 ": "°, speed cap ",
+  "보고서 로드 실패: ": "Report load failed: ",
+  "아직 검증 보고서가 없습니다(시뮬레이션 산출 후 표시)": "No verification report yet (shown after simulation)",
+  "종류": "Kind",
+  "TCP 오차mm": "TCP err mm",
+  "밑동 관절": "Base joints",
+  "통과": "pass",
+  "사유": "reason",
+  "닿는 목표 통과 ": "Reachable-target pass ",
+  " / 닿지 않는 목표 ": " / unreachable ",
+  "증거: ": "Evidence: ",
+  "GT 뼈대: ": "GT skeleton: ",
+  "사용 가능 — 메인 3D의 GT 표시로 겹쳐 비교하세요": "available — overlay-compare with the main 3D GT view",
+  "비공개(--private-visuals 필요)": "private (--private-visuals needed)",
+  "GT 뼈대: 확인 실패": "GT skeleton: check failed",
+  "로드 실패": "Load failed",
+  "(비공개)": "(private)",
+  "비공개": "private",
+  "미연결": "disconnected",
+  "가상만(브릭 미연결)": "Virtual only (bricks disconnected)",
+  "브릭 미연결(가상만)": "Bricks disconnected (virtual only)",
+  "가상만": "Virtual only",
+  "브릭": "Brick",
+  "(가짜)": "(fake)",
+  "가상": "virtual",
+  "가짜": "fake",
+  "연속성=": "continuity=",
+  "확정=": "confirmed=",
+  "확정 불가: ": "Cannot confirm: ",
+  "(해제 필요)": "(needs release)",
+  "좌표 입력이 숫자가 아닙니다": "Coordinate input is not a number",
+  "확정됨": "confirmed",
+  "저장=": "saved=",
+  "현재 가동=": "current uptime=",
+  "저장 가동=": "saved uptime=",
+  "연결 ok": "connected ok",
+  "복귀 완료": "returned",
+  // Camera errors (server side, translated client side).
+  "카메라 열기 실패": "Cannot open camera",
+  "카메라 프레임 없음": "No camera frame",
+  "카메라 확인 실패: ": "Camera check failed: ",
+  "카메라 정보 실패: ": "Camera info failed: ",
+  "번호": "No.",
+  "다른 앱이 카메라를 쓰고 있는지 확인하세요": "check whether another app uses the camera",
+  "다른 앱 사용 중 확인": "check other-app use",
+  "macOS 카메라 권한": "macOS camera permission",
+  "설정 > 개인 정보 보호 및 보안 > 카메라": "Settings > Privacy & Security > Camera",
+  "확인하세요": "please check",
+  "가짜 사진 없음: runs/stage9/real/ 비어 있음": "No fake photos: runs/stage9/real/ is empty",
+  "먼저 캡처 -> 추론을 실행하세요": "Run capture → infer first",
+  "trial 없음: ": "No trial: ",
+  "알 수 없음": "unknown",
+  "연결됨": "Connected",
+  "끊김: ": "Disconnected: ",
+  "언어": "Language",
+  // Follow-ups found while wrapping call sites.
+  "완": "Y",
+  "미": "N",
+  "초 ": "s ",
+  " 목표=": " target=",
+  "확인: ": "Confirm: ",
+  "가상 추종": "virtual follow",
+  "(본체 이동)": "(body move)",
+  "매트 점 없음": "No mat point",
+  "IK 실패(도달 불가 표시)": "IK failed (unreachable shown)",
+  "overview 실패": "overview failed",
+  "상태 수신 중": "Receiving status",
+  "범위 로드 실패: ": "Range load failed: ",
+  "현재 ": "current ",
+  "(가상)": "(virtual)",
+  "호밍 미완료": "Homing incomplete",
+  "데모 {n}: {r}": "Demo {n}: {r}",
+  "데모 중단: ": "Demo aborted: ",
+  "다음 단계: {name}\\n진행할까요?": "Next step: {name}\\nProceed?",
+  "데모 실패: ": "Demo failed: ",
+  " — 데모 끝": " — demo over",
+  "안전자세 {p} (저속)": "Safe pose {p} (slow)",
+  "매트 {n}번으로 이동 (저속)": "Move to mat {n} (slow)",
+  "매트 {n}: [{x}, {y}, {z}]mm": "Mat {n}: [{x}, {y}, {z}]mm",
+  "원위치 (safe01)": "Back home (safe01)",
+  "호밍 상태 확인": "Check homing status",
+  "최대오차 {x}°": "max error {x}°",
+  "오차 {x}mm": "error {x}mm",
+  "번호 {n} / {s} / 가짜 {m}장": "No. {n} / {s} / fake {m} photos",
+  "하트비트: {n}초 전 갱신": "Heartbeat: {n}s ago",
+  "한 번에 보정: J1~J4 센서 호밍 → 손목 → 확인자세. 진행할까요?": "Calibrate all: J1–J4 sensor homing → wrist → check pose. Proceed?",
+  "주차: 휴식 자세로 저속 이동 후 세션 저장. 진행할까요?": "Park: slow-move to rest pose, then save session. Proceed?",
+  "주차 저장됨(": "Park saved (",
+  "복원됨(연속성=": "Restored (continuity=",
+  "확인 자세로 이동됨. 3D 실측겹침을 보고 '맞음'을 누르세요.": "Moved to check pose. Look at the 3D overlay and press 'Correct'.",
+  "확인 자세 이동, 최대편차 ": "Check-pose move, max deviation ",
+  "설정 ": "Setting ",
+};
+const I18N_KEYS = Object.keys(STR).sort((a, b) => b.length - a.length);
+function T(s, vars) {
+  // Template mode: T("…{x}…", {x}) keeps unit/word order right.
+  if (vars !== undefined) {
+    const tpl = (LANG === "en" && STR[s] !== undefined) ? STR[s] : s;
+    return String(tpl).replace(/\\{(\\w+)\\}/g, (m, k) => vars[k]);
+  }
+  if (LANG !== "en" || typeof s !== "string") return s;
+  let out = s;
+  for (const k of I18N_KEYS) {
+    if (out.indexOf(k) === -1) continue;
+    out = out.split(k).join(STR[k]);
+  }
+  return out;
+}
+function applyLang() {
+  const en = LANG === "en";
+  document.documentElement.lang = en ? "en" : "ko";
+  const btn = document.getElementById("langbtn");
+  if (btn) btn.textContent = en ? "한" : "EN";
+  const walker = document.createTreeWalker(
+    document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const n of nodes) {
+    const tag = (n.parentNode && n.parentNode.tagName) || "";
+    if (tag === "SCRIPT" || tag === "STYLE") continue;
+    if (n._ko === undefined) n._ko = n.nodeValue;
+    n.nodeValue = en ? T(n._ko) : n._ko;
+  }
+  const attrs = document.querySelectorAll(
+    "[placeholder],[title],[alt]");
+  attrs.forEach((el) => {
+    for (const a of ["placeholder", "title", "alt"]) {
+      const v = el.getAttribute(a);
+      if (v === null) continue;
+      const k = "_ko_" + a;
+      if (el[k] === undefined) el[k] = v;
+      el.setAttribute(a, en ? T(el[k]) : el[k]);
+    }
+  });
+  try {
+    window.localStorage.setItem("console-lang",
+      en ? "en" : "ko");
+  } catch (err) { /* private mode: do not persist */ }
+}
 
 async function post(path, args) {
   const r = await fetch(path, {method: "POST",
@@ -1867,7 +2636,7 @@ async function initRobot() {
     for (const id of r.robots) {
       const o = document.createElement("option");
       o.value = id;
-      o.textContent = id === "tbot" ? "T-Bot (가상)" : "MR JOS";
+      o.textContent = id === "tbot" ? T("T-Bot (가상)") : "MR JOS";
       if (id === r.robot) o.selected = true;
       sel.appendChild(o);
     }
@@ -1875,7 +2644,7 @@ async function initRobot() {
       const rr = await post("/api/robot/select", {robot: sel.value});
       if (rr.ok) location.reload();
       else {
-        alert("로봇 전환 실패: " + (rr.error || "?"));
+        alert(T("로봇 전환 실패: ") + (rr.error || "?"));
         sel.value = ROBOT;
       }
     };
@@ -1892,7 +2661,7 @@ async function initModel() {
     const t = await post("/api/table", {});
     if (t.ok && t.stage) STAGE = t.stage;
   } catch (err) {
-    log("테이블 설정 로드 실패, 기본값 사용");
+    log(T("테이블 설정 로드 실패, 기본값 사용"));
   }
   // 3D scene lives on the main page only; cal/verify share
   // the same template but skip the WebGL build (and its tick).
@@ -2210,7 +2979,7 @@ async function refreshVisual() {
   sel.options[1].disabled = !ldraw;
   if (ldraw) MESHES.urls = r.links;
   document.getElementById("vmsg").textContent = ldraw ?
-    "" : "LDraw 메시 없음(기본 도형 유지)";
+    "" : T("LDraw 메시 없음(기본 도형 유지)");
 }
 function applyVis() {
   // Keep the primitives until LDraw meshes are actually ready:
@@ -2225,7 +2994,7 @@ function applyVis() {
   if (st.eeAxes) st.eeAxes.visible = prim;
   for (const g of MESHES.groups) if (g) g.visible = showMesh;
   document.getElementById("vsrc-name").textContent =
-    VSRC === "primitives" ? "기본 도형" : "LDraw 메시";
+    VSRC === "primitives" ? T("기본 도형") : T("LDraw 메시");
   applyGhost();
 }
 async function loadMeshes() {
@@ -2236,7 +3005,7 @@ async function loadMeshes() {
     ({GLTFLoader} = await import("three/addons/loaders/GLTFLoader.js"));
   } catch (err) {
     document.getElementById("vmsg").textContent =
-      "GLTFLoader 없음 (기본 도형 유지)";
+      T("GLTFLoader 없음 (기본 도형 유지)");
     document.getElementById("vsrc").value = "primitives";
     VSRC = "primitives";
     MESHES.loading = false;
@@ -2244,13 +3013,13 @@ async function loadMeshes() {
     return;
   }
   const loader = new GLTFLoader();
-  document.getElementById("vmsg").textContent = "LDraw 메시 로딩 중…";
+  document.getElementById("vmsg").textContent = T("LDraw 메시 로딩 중…");
   // Link ids come from /api/visual (D0..D6 MR JOS, D0..D3 T-Bot):
   // never a hardcoded 7-link list.
   const ids = Object.keys(MESHES.urls);
   if (!ids.length) {
     document.getElementById("vmsg").textContent =
-      "LDraw 링크 없음 (기본 도형 유지)";
+      T("LDraw 링크 없음 (기본 도형 유지)");
     document.getElementById("vsrc").value = "primitives";
     VSRC = "primitives";
     MESHES.loading = false;
@@ -2270,11 +3039,11 @@ async function loadMeshes() {
         buildGhostLdraw();
         document.getElementById("vmsg").textContent = "";
         applyVis();
-        log("LDraw 메시 로드 완료");
+        log(T("LDraw 메시 로드 완료"));
       }
     }, undefined, (err) => {
       document.getElementById("vmsg").textContent =
-        "메시 로드 실패: " + lid + " (기본 도형 유지)";
+        T("메시 로드 실패: ") + lid + T(" (기본 도형 유지)");
       document.getElementById("vsrc").value = "primitives";
       VSRC = "primitives";
       applyVis();
@@ -2515,8 +3284,8 @@ function tick() {
   const _tS = modelToStage(tcp), _aS = modelToStage(ta);
   document.getElementById("ik-live").textContent =
     "TCP [" + _tS.x.toFixed(1) + ", " + _tS.y.toFixed(1) + ", " +
-    _tS.z.toFixed(1) + "] / 목표 [" + _aS.x.toFixed(1) + ", " +
-    _aS.y.toFixed(1) + ", " + _aS.z.toFixed(1) + "] / 거리 " +
+    _tS.z.toFixed(1) + T("] / 목표 [") + _aS.x.toFixed(1) + ", " +
+    _aS.y.toFixed(1) + ", " + _aS.z.toFixed(1) + T("] / 거리 ") +
     _dist.toFixed(1) + "mm";
   // Encoder actual overlay (magenta): real pose vs command pose.
   try {
@@ -2549,19 +3318,19 @@ async function poll() {
       if (!e) return;
       e.textContent = txt; e.className = cls;
     };
-    el("st-left", "좌: " + (L === null ? "끊김" : "연결"),
+    el("st-left", T("좌:") + (L === null ? T("끊김") : T("연결")),
        L === null ? "bad" : "ok");
-    el("st-right", "우: " + (R === null ? "끊김" : "연결"),
+    el("st-right", T("우:") + (R === null ? T("끊김") : T("연결")),
        R === null ? "bad" : "ok");
     const latched = (L === true || R === true);
-    el("st-latch", "래치: " + (latched ? "걸림" : "없음"),
+    el("st-latch", T("래치") + ": " + (latched ? T("걸림") : T("없음")),
        latched ? "bad" : "ok");
     const allMm = ((MODEL && MODEL.joints) || []).length > 0 &&
       MODEL.joints.every((k) => k.unit === "mm");
     const uj = allMm ? "(mm)" : "(°)";
-    let html = "<table><tr><th>관절</th><th>관절각" + uj + "</th>" +
-      "<th>모터각</th><th>홈</th><th>방향</th><th>센서</th>" +
-      "<th>조그</th></tr>";
+    let html = "<table><tr><th>" + T("관절") + "</th><th>" + T("관절각") + uj + "</th>" +
+      "<th>" + T("모터각") + "</th><th>" + T("홈") + "</th><th>" + T("방향") + "</th><th>" + T("센서") + "</th>" +
+      "<th>" + T("조그") + "</th></tr>";
     const fEl = document.getElementById("follow-live");
     const follow = fEl ? fEl.checked : false;
     const jtEl = document.getElementById("joints");
@@ -2571,13 +3340,13 @@ async function poll() {
       if (follow && j.joint_deg !== null && j.joint_deg !== undefined)
         qdeg[j.joint] = j.joint_deg;
       const jog = j.direction === "confirmed" ? ""
-        : (uOf(j.joint) === "mm" ? " (최대±5mm)" : " (최대±5°)");
+        : (uOf(j.joint) === "mm" ? T(" (최대±5mm)") : T(" (최대±5°)"));
       html += "<tr><td>" + j.joint + "</td><td>" +
         (j.joint_deg === null ? "?" : j.joint_deg.toFixed(1)) + "</td><td>" +
         (j.motor_deg === null ? "?" : j.motor_deg.toFixed(1)) + "</td><td>" +
-        (j.homed ? "완료" : "−") + "</td><td>" +
-        (j.direction === "confirmed" ? "확인됨"
-         : "<span class='unconf'>방향 미확인</span>") + "</td><td>" +
+        (j.homed ? T("완료") : "−") + "</td><td>" +
+        (j.direction === "confirmed" ? T("확인됨")
+         : T("<span class='unconf'>방향 미확인</span>")) + "</td><td>" +
         (j.sensor === null || j.sensor === undefined ? "−" :
          j.sensor + ":" + JSON.stringify(j.sensor_state)) +
         "</td><td>" +
@@ -2592,26 +3361,25 @@ async function poll() {
       b.onclick = async () => {
         const r = await post("/api/jog",
           {joint: b.dataset.j, delta: parseFloat(b.dataset.d)});
-        if (!r.ok) alert("jog 실패: " + r.error);
+        if (!r.ok) alert(T("jog 실패: ") + r.error);
       };
     });
     // Homing dots + calibration link + mode banner + diag.
     const dots = o.joints.map((j) =>
       j.joint + (j.homed ? "●" : "○")).join(" ");
-    el("homedots", "호밍: " + dots, "");
+    el("homedots", T("호밍: ") + dots, "");
     const unhomed = o.joints.some((j) => !j.homed);
     const cl = document.getElementById("cal-link");
     if (cl) cl.style.display = unhomed ? "" : "none";
     try {
       const md = await post("/api/mode", {});
       if (md.ok) VIRT = !!md.virtual;
-      window._lastMode = md;
     } catch (err) { /* keep last VIRT */ }
     // isConnected() is robot-aware (T-Bot virtual-only never connects);
     // identical to the latch check for MR JOS.
     const conn = isConnected();
-    el("mode", (conn ? (VIRT ? "로봇 연결됨(가짜)" : "로봇 연결됨")
-                    : "가상만(브릭 미연결)") +
+    el("mode", (conn ? (VIRT ? T("로봇 연결됨(가짜)") : T("로봇 연결됨"))
+                    : T("가상만(브릭 미연결)")) +
       (ROBOT === "tbot" ? " T-Bot" : ""), conn ? "ok" : "bad");
     // Status-change record: connection, latch, per-joint
     // homed/read state. Baseline once, then only on change, so
@@ -2620,106 +3388,86 @@ async function poll() {
     const stLatch = !!(L === true || R === true);
     const stJoints = (o.joints || []).map((j) =>
       j.joint + "=" + (j.joint_deg === null || j.joint_deg === undefined
-        ? "읽김" : Number(j.joint_deg).toFixed(1)) + "/" +
-      (j.homed ? "완" : "미")).join(" ");
+        ? T("읽김") : Number(j.joint_deg).toFixed(1)) + "/" +
+      (j.homed ? T("완") : T("미"))).join(" ");
     const stSig = (stOk ? "1" : "0") + (stLatch ? "1" : "0") +
       (o.joints || []).map((j) =>
         (j.homed ? "1" : "0") +
         ((j.joint_deg === null || j.joint_deg === undefined) ? "0" : "1")
       ).join("");
     if (window._lastStSig === undefined) {
-      log("상태기준 연결=" + (stOk ? "ok" : "bad") +
-        " 래치=" + (stLatch ? "걸림" : "없음") + " " + stJoints);
+      log(T("상태기준 연결=") + (stOk ? "ok" : "bad") +
+        T(" 래치=") + (stLatch ? T("걸림") : T("없음")) + " " + stJoints);
     } else if (window._lastStSig !== stSig) {
-      log("상태변경 연결=" + (stOk ? "ok" : "bad") +
-        " 래치=" + (stLatch ? "걸림" : "없음") + " " + stJoints);
+      log(T("상태변경 연결=") + (stOk ? "ok" : "bad") +
+        T(" 래치=") + (stLatch ? T("걸림") : T("없음")) + " " + stJoints);
     }
     window._lastStSig = stSig;
     const dg = document.getElementById("diag");
     if (dg) {
-      let dh = "<table><tr><th>관절</th><th>브릭/포트</th>" +
-        "<th>모터각</th><th>관절각</th><th>홈</th><th>센서</th>" +
-        "<th>래치</th></tr>";
+      let dh = "<table><tr><th>" + T("관절") + "</th><th>" + T("브릭/포트") + "</th>" +
+        "<th>" + T("모터각") + "</th><th>" + T("관절각") + "</th><th>" + T("홈") + "</th><th>" + T("센서") + "</th>" +
+        "<th>" + T("래치") + "</th></tr>";
       for (const j of o.joints) {
         dh += "<tr><td>" + j.joint + "</td><td>" + j.brick + "/" +
           j.port + "</td><td>" +
           (j.motor_deg === null ? "?" : j.motor_deg.toFixed(1)) +
           "</td><td>" +
           (j.joint_deg === null ? "?" : j.joint_deg.toFixed(1)) +
-          "</td><td>" + (j.homed ? "완료" : "−") + "</td><td>" +
+          "</td><td>" + (j.homed ? T("완료") : "−") + "</td><td>" +
           (j.sensor === null || j.sensor === undefined ? "−" :
            j.sensor + ":" + JSON.stringify(j.sensor_state)) +
-          "</td><td>" + (latched ? "걸림" : "없음") + "</td></tr>";
+          "</td><td>" + (latched ? T("걸림") : T("없음")) + "</td></tr>";
       }
-      // Brick inventory: which copy each brick runs, which motor
-      // ports it knows, which devices are unplugged, and its SW
-      // version. A stale or wrong-side brick copy shows up here.
-      let brickInv = "";
-      try {
-        const md = window._lastMode;
-        const mid = (md && md.ok && md.identity) || {};
-        const mmo = (md && md.ok && md.motors) || {};
-        const mmi = (md && md.ok && md.missing) || {};
-        const msw = (md && md.ok && md.sw_version) || {};
-        brickInv = Object.keys(mid).map((b) =>
-          b + "=" + mid[b] +
-          "[모터 " + (mmo[b] || []).join(",") + "]" +
-          (msw[b] ? "[v" + msw[b] + "]" : "[버전읽김]") +
-          (((mmi[b] || []).length)
-            ? "[<b>미연결:" + mmi[b].join(",") + "</b>]" : "")
-        ).join(" / ");
-      } catch (err) { brickInv = ""; }
-      dg.innerHTML = (brickInv
-        ? "<div>브릭 식별: " + brickInv + "</div>" : "") +
-        dh + "</table>";
+      dg.innerHTML = dh + "</table>";
     }
     refreshSend();
   } catch (e) {
-    document.getElementById("st-hb").textContent = "하트비트: 실패";
+    document.getElementById("st-hb").textContent = T("하트비트: 실패");
     document.getElementById("st-hb").className = "bad";
     return;
   }
   const ago = ((Date.now() - lastOk) / 1000).toFixed(0);
   const hb = document.getElementById("st-hb");
-  hb.textContent = "하트비트: " + ago + "초 전 갱신";
+  hb.textContent = T("하트비트: {n}초 전 갱신", {n: ago});
   hb.className = "ok";
 }
 document.getElementById("estop").onclick = async () => {
   const r = await post("/api/estop", {});
-  alert(r.ok ? "E-STOP 전송됨" : "E-STOP 실패: " + (r.error || "?"));
-  log(r.ok ? "E-STOP 전송됨" : "E-STOP 실패: " + (r.error || "?"));
+  alert(r.ok ? T("E-STOP 전송됨") : T("E-STOP 실패: ") + (r.error || "?"));
+  log(r.ok ? T("E-STOP 전송됨") : T("E-STOP 실패: ") + (r.error || "?"));
 };
 document.getElementById("btn-clear").onclick = async () => {
   const r = await post("/api/clear", {});
-  log(r.ok ? "래치 해제됨" : "래치 해제 실패: " + (r.error || "?"));
+  log(r.ok ? T("래치 해제됨") : T("래치 해제 실패: ") + (r.error || "?"));
 };
 document.getElementById("w4-try").onclick = async () => {
   const j = document.getElementById("w4-joint").value;
   const r = await post("/api/jog", {joint: j, delta: 5});
   document.getElementById("w4-msg").textContent =
-    r.ok ? "모델과 실물을 비교하세요" : "실패: " + r.error;
+    r.ok ? T("모델과 실물을 비교하세요") : T("실패: ") + r.error;
 };
 document.getElementById("w4-ok").onclick = async () => {
   const j = document.getElementById("w4-joint").value;
   const r = await post("/api/direction", {joint: j, verdict: "correct"});
   document.getElementById("w4-msg").textContent =
-    r.ok ? j + " 정방향 확정" : "실패: " + r.error;
+    r.ok ? j + T(" 정방향 확정") : T("실패: ") + r.error;
 };
 document.getElementById("w4-rev").onclick = async () => {
   const j = document.getElementById("w4-joint").value;
   const r = await post("/api/direction", {joint: j, verdict: "reversed"});
   document.getElementById("w4-msg").textContent =
-    r.ok ? j + " 반대 → 부호 뒤집어 저장됨(비율 " + r.ratio + ")" : "실패: " + r.error;
-  log("M4 " + j + " reversed: " + (r.ok ? "비율 " + r.ratio : r.error));
+    r.ok ? j + T(" 반대 → 부호 뒤집어 저장됨(비율 ") + r.ratio + ")" : T("실패: ") + r.error;
+  log("M4 " + j + " reversed: " + (r.ok ? T("비율 ") + r.ratio : r.error));
 };
 function statusCtx() {
-  if (!lastOv) return "상태수신전";
+  if (!lastOv) return T("상태수신전");
   const L = lastOv.latched.left, R = lastOv.latched.right;
-  const lr = "좌:" + (L === null ? "끊김" : (L ? "래치" : "연결")) +
-    " 우:" + (R === null ? "끊김" : (R ? "래치" : "연결"));
+  const lr = T("좌:") + (L === null ? T("끊김") : (L ? T("래치") : T("연결"))) +
+    T(" 우:") + (R === null ? T("끊김") : (R ? T("래치") : T("연결")));
   const js = (lastOv.joints || []).map((j) =>
     j.joint + "=" + (j.joint_deg === null || j.joint_deg === undefined
-      ? "읽김" : Number(j.joint_deg).toFixed(1))).join(" ");
+      ? T("읽김") : Number(j.joint_deg).toFixed(1))).join(" ");
   return lr + " " + js;
 }
 function log(msg) {
@@ -2729,7 +3477,9 @@ function log(msg) {
   // Every line carries live left/right + joint context so a failure
   // line alone shows the cause; status lines already carry it.
   const ctx = (msg.indexOf("상태기준") === 0 ||
-               msg.indexOf("상태변경") === 0)
+               msg.indexOf("상태변경") === 0 ||
+               msg.indexOf("Status baseline") === 0 ||
+               msg.indexOf("Status changed") === 0)
     ? "" : " [" + statusCtx() + "]";
   d.textContent = new Date().toLocaleTimeString() + " " + msg + ctx;
   el.prepend(d);
@@ -2737,31 +3487,31 @@ function log(msg) {
 }
 async function refreshRanges() {
   const r = await post("/api/ranges", {});
-  if (!r.ok) { log("범위 로드 실패: " + r.error); return; }
+  if (!r.ok) { log(T("범위 로드 실패: ") + r.error); return; }
   const f1 = (v) => (v === null || v === undefined ? "−"
     : (+v).toFixed(1));
   const rng = (a) => "[" + f1(a[0]) + "," + f1(a[1]) + "]";
-  let html = "<table><tr><th>관절</th><th>5A 시뮬</th>" +
-    "<th>실측[lo,hi]</th><th>채택</th><th>기록</th></tr>";
+  let html = "<table><tr><th>" + T("관절") + "</th><th>" + T("5A 시뮬") + "</th>" +
+    "<th>" + T("실측[lo,hi]") + "</th><th>" + T("채택") + "</th><th>" + T("기록") + "</th></tr>";
   for (const j of r.joints) {
     const cur = (qdeg[j.joint] || 0).toFixed(1);
     const uu = uOf(j.joint) === "mm" ? "mm" : "°";
     html += "<tr><td>" + j.joint + "</td><td>" + rng(j.sim) +
       "</td><td>" + rng(j.measured) + "</td><td>" + rng(j.adopted) +
-      (j.adopted_source === "measured" ? "(실측)" : "(시뮬)") +
-      "</td><td>현재 " + cur + uu + " " +
-      "<button data-j='" + j.joint + "' data-e='lo'>lo로</button>" +
-      "<button data-j='" + j.joint + "' data-e='hi'>hi로</button>" +
+      (j.adopted_source === "measured" ? T("(실측)") : T("(시뮬)")) +
+      "</td><td>" + T("현재 ") + cur + uu + " " +
+      "<button data-j='" + j.joint + "' data-e='lo'>" + T("lo로") + "</button>" +
+      "<button data-j='" + j.joint + "' data-e='hi'>" + T("hi로") + "</button>" +
       "</td></tr>";
   }
   document.getElementById("ranges").innerHTML = html + "</table>" +
-    "<div>여유 " + r.margin_deg + "° (패키지 " +
+    "<div>" + T("여유 ") + r.margin_deg + "°" + T(" (패키지 ") +
     r.package_margin_deg + "°)</div>";
   document.querySelectorAll("#ranges button").forEach((b) => {
     b.onclick = async () => {
       const rr = await post("/api/range", {joint: b.dataset.j,
         end: b.dataset.e, joint_deg: qdeg[b.dataset.j] || 0});
-      log("M5 " + b.dataset.j + " " + b.dataset.e + " 기록: " +
+      log("M5 " + b.dataset.j + " " + b.dataset.e + T(" 기록: ") +
         (rr.ok ? "ok" : rr.error));
       refreshRanges();
     };
@@ -2769,10 +3519,10 @@ async function refreshRanges() {
 }
 async function refreshPoses() {
   const r = await post("/api/poses", {});
-  if (!r.ok) { log("자세 로드 실패: " + r.error); return; }
+  if (!r.ok) { log(T("자세 로드 실패: ") + r.error); return; }
   const sel = document.getElementById("w6-pose");
   sel.innerHTML = "";
-  let html = "<table><tr><th>자세</th><th>목표각</th><th>최근 오차</th></tr>";
+  let html = "<table><tr><th>" + T("자세") + "</th><th>" + T("목표각") + "</th><th>" + T("최근 오차") + "</th></tr>";
   for (const p of r.poses) {
     const o = document.createElement("option");
     o.textContent = p.id; sel.appendChild(o);
@@ -2854,7 +3604,7 @@ async function solveIK(seedQ) {
     st.prevLine.visible =
       document.getElementById("vm-prev").checked;
   } catch (err) {
-    log("이전 자세 표시 실패");
+    log(T("이전 자세 표시 실패"));
   }
   let mat = null, po = true;
   if (st.tc.getMode() === "rotate") {
@@ -2899,8 +3649,8 @@ async function solveIK(seedQ) {
   const msg = document.getElementById("ik-msg");
   if (!r.ok || !r.ik) {
     setMarker(0xff2222);
-    msg.textContent = "실패: " + (r.error || "?");
-    log("IK 실패: " + (r.error || "?"));
+    msg.textContent = T("실패: ") + (r.error || "?");
+    log(T("IK 실패: ") + (r.error || "?"));
     return;
   }
   // Display rule: virtual-only (bricks unreachable) drives the
@@ -2915,7 +3665,7 @@ async function solveIK(seedQ) {
     for (const j of MODEL.joints) qdeg[j.id] = sol[j.id];
     pendingQ = null; previewOk = false; previewRange = "";
     ghostOn = false; applyGhost();
-    msg.textContent += " | 가상 추종(본체 이동)";
+    msg.textContent += T(" | 가상 추종(본체 이동)");
   } else {
     pendingQ = sol;
     previewOk = !!r.ik.success;
@@ -2931,21 +3681,21 @@ async function solveIK(seedQ) {
       (ptcp.y - pta.y) ** 2 + (ptcp.z - pta.z) ** 2);
     const _pS = modelToStage(ptcp), _gS = modelToStage(pta);
     document.getElementById("preview-dist").textContent =
-      (conn ? "미리보기" : "본체") +
+      (conn ? T("미리보기") : T("본체")) +
       " [" + _pS.x.toFixed(1) + ", " + _pS.y.toFixed(1) +
-      ", " + _pS.z.toFixed(1) + "] / 목표 [" + _gS.x.toFixed(1) +
+      ", " + _pS.z.toFixed(1) + T("] / 목표 [") + _gS.x.toFixed(1) +
       ", " + _gS.y.toFixed(1) + ", " + _gS.z.toFixed(1) +
-      "] / 거리 " + pdd.toFixed(1) + "mm";
+      T("] / 거리 ") + pdd.toFixed(1) + "mm";
   } catch (err) {
-    log("미리보기 표시 실패");
+    log(T("미리보기 표시 실패"));
   }
   setMarker((wasClamped || walked || !r.ik.success) ? 0xff2222 :
     0xff8800);
-  msg.textContent = (r.ik.success ? "수렴" : "미수렴(최근접)") +
-    (wasClamped ? " (테이블 클램프)" : "") +
-    (walked ? " (최근접 추종)" : "") +
-    " 위치오차 " + r.ik.pos_err_mm.toFixed(1) + "mm" +
-    " 자세오차 " + r.ik.rot_err_deg.toFixed(1) + "°";
+  msg.textContent = (r.ik.success ? T("수렴") : T("미수렴(최근접)")) +
+    (wasClamped ? T(" (테이블 클램프)") : "") +
+    (walked ? T(" (최근접 추종)") : "") +
+    T(" 위치오차 ") + r.ik.pos_err_mm.toFixed(1) + "mm" +
+    T(" 자세오차 ") + r.ik.rot_err_deg.toFixed(1) + "°";
   log("IK " + msg.textContent);
   try {
     const qd = {};
@@ -2957,11 +3707,11 @@ async function solveIK(seedQ) {
     if (pv.ok) {
       const ms = pv.motors.map((m) => m.motor + "=" + m.target).join(" ");
       previewRange = pv.range;
-      msg.textContent += " | 모터 " + ms + " | 범위 " + pv.range;
-      log("모터 미리보기: " + ms + " / 범위: " + pv.range);
+      msg.textContent += T(" | 모터 ") + ms + T(" | 범위 ") + pv.range;
+      log(T("모터 미리보기: ") + ms + T(" / 범위: ") + pv.range);
     }
   } catch (err) {
-    log("미리보기 실패: " + (err && err.message ? err.message : err));
+    log(T("미리보기 실패: ") + (err && err.message ? err.message : err));
   }
   refreshSend();
   try {
@@ -2983,13 +3733,13 @@ async function solveIK(seedQ) {
       }
     }
     const stat =
-      (r.ik.success ? "수렴" : "미수렴(최근접)") +
-      " / 오차 " + r.ik.pos_err_mm.toFixed(1) + "mm" +
-      " / 제한 " + (lim.length ? lim.join(",") : "없음") +
-      " / 목표(테이블) [" + sg.x.toFixed(1) + ", " + sg.y.toFixed(1) +
+      (r.ik.success ? T("수렴") : T("미수렴(최근접)")) +
+      T(" / 오차 ") + r.ik.pos_err_mm.toFixed(1) + "mm" +
+      T(" / 제한 ") + (lim.length ? lim.join(",") : T("없음")) +
+      T(" / 목표(테이블) [") + sg.x.toFixed(1) + ", " + sg.y.toFixed(1) +
       ", " + sg.z.toFixed(1) + "]mm";
     document.getElementById("ik-stat").textContent = stat;
-    log("IK 상태: " + stat);
+    log(T("IK 상태: ") + stat);
     if (document.getElementById("vm-gt").checked) {
       const gq = {};
       for (const j of MODEL.joints) gq[j.id] = sol[j.id];
@@ -2999,13 +3749,13 @@ async function solveIK(seedQ) {
         st.setSkel(st.gtLine, gp);
       } else {
         st.gtLine.visible = false;
-        log("GT 표시 불가: " + (g.error || "no private visuals"));
+        log(T("GT 표시 불가: ") + (g.error || "no private visuals"));
       }
     } else {
       st.gtLine.visible = false;
     }
   } catch (err) {
-    log("IK 상태 표시 실패: " + (err && err.message ? err.message : err));
+    log(T("IK 상태 표시 실패: ") + (err && err.message ? err.message : err));
   }
 }
 const SEND_SPEED_DPS = 15.0;
@@ -3023,13 +3773,13 @@ function unhomedJoints() {
   return lastOv.joints.filter((j) => !j.homed).map((j) => j.joint);
 }
 function sendBlockReason() {
-  if (!lastOv) return "상태 수신 중";
-  if (!isConnected()) return "브릭 미연결(가상만)";
+  if (!lastOv) return T("상태 수신 중");
+  if (!isConnected()) return T("브릭 미연결(가상만)");
   const L = lastOv.latched.left, R = lastOv.latched.right;
-  if (L === true || R === true) return "래치 걸림(해제 필요)";
-  if (!pendingQ || !previewOk) return "유효한 미리보기 없음";
+  if (L === true || R === true) return T("래치 걸림(해제 필요)");
+  if (!pendingQ || !previewOk) return T("유효한 미리보기 없음");
   if (previewRange && previewRange !== "ok")
-    return "범위 위반: " + previewRange;
+    return T("범위 위반: ") + previewRange;
   return "";
 }
 function refreshSend() {
@@ -3041,9 +3791,9 @@ function refreshSend() {
   if (btn) btn.disabled = !!reason;
   const unhomed = unhomedJoints();
   if (msg) msg.textContent = reason ||
-    (unhomed.length ? "경고: 호밍 미완료(" + unhomed.join(",") +
-      ") — 클릭 시 확인 후 전송 (저속 " + SEND_SPEED_DPS + "°/s)"
-      : ("보내기 가능 (저속 " + SEND_SPEED_DPS + "°/s)"));
+    (unhomed.length ? T("경고: 호밍 미완료(") + unhomed.join(",") +
+      T(") — 클릭 시 확인 후 전송 (저속 ") + SEND_SPEED_DPS + "°/s)"
+      : (T("보내기 가능 (저속 ") + SEND_SPEED_DPS + "°/s)"));
 }
 document.getElementById("send-go").onclick = async () => {
   const reason = sendBlockReason();
@@ -3052,18 +3802,18 @@ document.getElementById("send-go").onclick = async () => {
     return;
   }
   const unhomed = unhomedJoints();
-  if (unhomed.length && !confirm("호밍 미완료 관절: " +
-      unhomed.join(", ") + "\\n보정 없이 저속으로 보낼까요?")) {
-    log("보내기 취소(호밍 미완료 확인 거부)");
+  if (unhomed.length && !confirm(T("호밍 미완료 관절: ") +
+      unhomed.join(", ") + T("\\n보정 없이 저속으로 보낼까요?"))) {
+    log(T("보내기 취소(호밍 미완료 확인 거부)"));
     return;
   }
   let mx = 0;
   for (const j of MODEL.joints)
     mx = Math.max(mx, Math.abs((pendingQ[j.id] || 0) -
       (qdeg[j.id] || 0)));
-  if (mx > 45 && !confirm("한 관절이 " + mx.toFixed(1) +
-      "° 움직입니다. 진행할까요?")) {
-    log("보내기 취소(대이동 확인 거부)");
+  if (mx > 45 && !confirm(T("한 관절이 ") + mx.toFixed(1) +
+      T("° 움직입니다. 진행할까요?"))) {
+    log(T("보내기 취소(대이동 확인 거부)"));
     return;
   }
   const st = window._scene;
@@ -3071,8 +3821,8 @@ document.getElementById("send-go").onclick = async () => {
     speed_dps: SEND_SPEED_DPS, label: "main-send"});
   if (!r.ok) {
     document.getElementById("send-msg").textContent =
-      "거부: " + (r.error || "?");
-    log("보내기 거부: " + (r.error || "?"));
+      T("거부: ") + (r.error || "?");
+    log(T("보내기 거부: ") + (r.error || "?"));
     return;
   }
   for (const j of MODEL.joints) qdeg[j.id] = pendingQ[j.id];
@@ -3080,12 +3830,12 @@ document.getElementById("send-go").onclick = async () => {
   snapGizmoToTCP();
   pendingQ = null; previewOk = false; previewRange = "";
   ghostOn = false; applyGhost();
-  log("로봇으로 보내기 완료");
+  log(T("로봇으로 보내기 완료"));
   refreshSend();
 };
 document.getElementById("send-stop").onclick = async () => {
   const r = await post("/api/estop", {});
-  log(r.ok ? "정지(E-STOP) 전송됨" : "정지 실패: " + (r.error || "?"));
+  log(r.ok ? T("정지(E-STOP) 전송됨") : T("정지 실패: ") + (r.error || "?"));
 };
 document.getElementById("xyz-go").onclick = () => {
   const st = window._scene;
@@ -3094,7 +3844,7 @@ document.getElementById("xyz-go").onclick = () => {
   const z = parseFloat(document.getElementById("xyz-z").value);
   if ([x, y, z].some((v) => isNaN(v))) {
     document.getElementById("ik-msg").textContent =
-      "좌표 입력이 숫자가 아닙니다";
+      T("좌표 입력이 숫자가 아닙니다");
     return;
   }
   st.target.position.copy(st.arm.localToWorld(stageToModel(
@@ -3125,20 +3875,20 @@ document.getElementById("ik-reset").onclick = () => {
 };
 document.getElementById("ik-tcp").onclick = () => {
   snapGizmoToTCP();
-  log("기즈모를 현재 TCP로 이동");
+  log(T("기즈모를 현재 TCP로 이동"));
 };
 document.getElementById("ik-reach").onclick = async () => {
   const st = window._scene;
   const r = await post("/api/reachable_target", {});
   if (!r.ok) {
     document.getElementById("ik-msg").textContent =
-      "닿는 목표 실패: " + r.error;
+      T("닿는 목표 실패: ") + r.error;
     return;
   }
   const v = new THREE.Vector3(r.target[0], r.target[1], r.target[2]);
   st.target.position.copy(st.arm.localToWorld(v));
   document.getElementById("ik-msg").textContent =
-    "닿는 목표: [" + r.target.join(", ") + "]mm";
+    T("닿는 목표: [") + r.target.join(", ") + "]mm";
   solveIK();
 };
 let MAT = null;
@@ -3146,7 +3896,7 @@ async function loadMat() {
   const r = await post("/api/mat_points", {});
   const sel = document.getElementById("mat-point");
   if (!r.ok || !r.mat) {
-    sel.innerHTML = "<option>매트 없음(비공개)</option>";
+    sel.innerHTML = "<option>" + T("매트 없음(비공개)") + "</option>";
     return;
   }
   MAT = r.mat;
@@ -3175,7 +3925,7 @@ async function loadMat() {
       for (const p of MAT.points) {
         const b = document.createElement("button");
         b.textContent = p.n;
-        b.title = "매트 " + p.n;
+        b.title = T("매트 ") + p.n;
         b.onclick = () => {
           document.getElementById("mat-point").value = String(p.n);
           document.getElementById("mat-go").click();
@@ -3237,39 +3987,39 @@ document.getElementById("mat-go").onclick = async () => {
   st.target.position.copy(st.arm.localToWorld(
     new THREE.Vector3(p.x, p.y, p.z)));
   document.getElementById("ik-msg").textContent =
-    `매트 ${p.n}: [${p.x}, ${p.y}, ${p.z}]mm`;
+    T("매트 {n}: [{x}, {y}, {z}]mm", {n: p.n, x: p.x, y: p.y, z: p.z});
   solveIK(p.seed || null);
 };
 document.getElementById("demo-start").onclick = async () => {
   const msg = document.getElementById("demo-msg");
   const step = async (name, fn) => {
-    if (!confirm(`다음 단계: ${name}\n진행할까요?`)) {
-      msg.textContent = `중단: ${name}`;
-      log(`데모 중단: ${name}`);
+    if (!confirm(T("다음 단계: {name}\\n진행할까요?", {name}))) {
+      msg.textContent = T("중단: {name}", {name});
+      log(T("데모 중단: {name}", {name}));
       throw new Error("stop");
     }
     const r = await fn();
     msg.textContent = `${name}: ${r}`;
-    log(`데모 ${name}: ${r}`);
+    log(T("데모 {n}: {r}", {n: name, r: r}));
   };
   try {
-    await step("호밍 상태 확인", async () => {
+    await step(T("호밍 상태 확인"), async () => {
       const o = await post("/api/overview", {});
-      if (!o.ok) throw new Error("overview 실패");
-      return "연결 ok";
+      if (!o.ok) throw new Error(T("overview 실패"));
+      return T("연결 ok");
     });
     const pr = await post("/api/poses", {});
     const poseQ = {};
     if (pr.ok) for (const p of pr.poses) poseQ[p.id] = p.q_deg;
     for (const pose of ["safe02", "safe05"]) {
-      await step(`안전자세 ${pose} (저속)`, async () => {
+      await step(T("안전자세 {p} (저속)", {p: pose}), async () => {
         const r = await post("/api/pose", {pose});
-        if (!r.ok) throw new Error(r.error || "거부");
+        if (!r.ok) throw new Error(r.error || T("거부"));
         if (poseQ[pose]) MODEL.joints.forEach((j, i) => {
           qdeg[j.id] = poseQ[pose][i];
         });
         snapGizmoToTCP();
-        return `최대오차 ${r.max_abs_err.toFixed(2)}°`;
+        return T("최대오차 {x}°", {x: r.max_abs_err.toFixed(2)});
       });
     }
     if (!MAT) await loadMat();
@@ -3277,40 +4027,40 @@ document.getElementById("demo-start").onclick = async () => {
       .split(",").map((s) => parseInt(s.trim(), 10))
       .filter((v) => !isNaN(v)).slice(0, 5);
     for (const n of nums) {
-      await step(`매트 ${n}번으로 이동 (저속)`, async () => {
+      await step(T("매트 {n}번으로 이동 (저속)", {n: n}), async () => {
         const p = MAT.points.find((q) => q.n === n);
-        if (!p) throw new Error("매트 점 없음");
+        if (!p) throw new Error(T("매트 점 없음"));
         const ik = await post("/api/ik",
           {pos: [p.x, p.y, p.z], mat: null,
            q_init: p.seed ||
              MODEL.joints.map((j) => qdeg[j.id] || 0),
            position_only: true});
         if (!ik.ok || !ik.ik.success)
-          throw new Error("IK 실패(도달 불가 표시)");
+          throw new Error(T("IK 실패(도달 불가 표시)"));
         const qd = {};
         ik.joints.forEach((jid, i) => { qd[jid] = ik.ik.q_deg[i]; });
         const g = await post("/api/goto",
           {q_deg: qd, speed_dps: 15, label: `mat${n}`});
-        if (!g.ok) throw new Error(g.error || "이동 거부");
+        if (!g.ok) throw new Error(g.error || T("이동 거부"));
         ik.joints.forEach((jid, i) => { qdeg[jid] = ik.ik.q_deg[i]; });
         snapGizmoToTCP();
-        return `오차 ${ik.ik.pos_err_mm.toFixed(1)}mm`;
+        return T("오차 {x}mm", {x: ik.ik.pos_err_mm.toFixed(1)});
       });
     }
-    await step("원위치 (safe01)", async () => {
+    await step(T("원위치 (safe01)"), async () => {
       const r = await post("/api/pose", {pose: "safe01"});
-      if (!r.ok) throw new Error(r.error || "거부");
+      if (!r.ok) throw new Error(r.error || T("거부"));
       if (poseQ["safe01"]) MODEL.joints.forEach((j, i) => {
         qdeg[j.id] = poseQ["safe01"][i];
       });
       snapGizmoToTCP();
-      return "복귀 완료";
+      return T("복귀 완료");
     });
-    msg.textContent += " — 데모 끝";
+    msg.textContent += T(" — 데모 끝");
   } catch (err) {
     if (err && err.message !== "stop") {
-      msg.textContent = "실패: " + err.message;
-      log("데모 실패: " + err.message);
+      msg.textContent = T("실패: ") + err.message;
+      log(T("데모 실패: ") + err.message);
     }
   }
 };
@@ -3318,23 +4068,23 @@ document.getElementById("w6-run").onclick = async () => {
   const id = document.getElementById("w6-pose").value;
   const r = await post("/api/pose", {pose: id});
   document.getElementById("w6-msg").textContent =
-    r.ok ? id + " 재현 완료, 최대오차 " + r.max_abs_err.toFixed(2) + "°"
-         : "실패(거부): " + r.error;
+    r.ok ? id + T(" 재현 완료, 최대오차 ") + r.max_abs_err.toFixed(2) + "°"
+         : T("실패(거부): ") + r.error;
   log("M6 " + id + ": " + (r.ok ? "ok" : r.error));
   if (r.ok) snapGizmoToTCP();
   refreshPoses();
 };
 async function refreshConfig() {
   const r = await post("/api/config", {});
-  if (!r.ok) { log("설정 로드 실패: " + r.error); return; }
-  let html = "<table><tr><th>항목</th><th>값</th><th>변경</th></tr>";
+  if (!r.ok) { log(T("설정 로드 실패: ") + r.error); return; }
+  let html = "<table><tr><th>" + T("항목") + "</th><th>" + T("값") + "</th><th>" + T("변경") + "</th></tr>";
   for (const k of Object.keys(r.tunables)) {
     html += "<tr><td>" + k + "</td><td>" + r.tunables[k] +
       "</td><td><input id='cfg-" + k + "' size='6'>" +
-      "<button data-k='" + k + "'>적용</button></td></tr>";
+      "<button data-k='" + k + "'>" + T("적용") + "</button></td></tr>";
   }
   document.getElementById("cfgs").innerHTML = html + "</table>" +
-    "<div>패키지 여유 " + r.package.operating_margin_deg + "°, 속도 상한 " +
+    "<div>" + T("패키지 여유 ") + r.package.operating_margin_deg + T("°, 속도 상한 ") +
     JSON.stringify(r.package.speed_caps) + "</div>";
   document.querySelectorAll("#cfgs button").forEach((b) => {
     b.onclick = async () => {
@@ -3342,7 +4092,7 @@ async function refreshConfig() {
         document.getElementById("cfg-" + b.dataset.k).value);
       const rr = await post("/api/config/set",
         {key: b.dataset.k, value: v});
-      log("설정 " + b.dataset.k + "=" + v + ": " +
+      log(T("설정 ") + b.dataset.k + "=" + v + ": " +
         (rr.ok ? "ok" : rr.error));
       refreshConfig();
     };
@@ -3362,13 +4112,13 @@ async function renderHoming() {
     for (const [jid, jspec] of rows) {
       const method = (jspec && jspec.method) || "manual";
       html += "<div>" + jid + " [" + method + "] " +
-        (homed[jid] ? "완료" : "미완") + " " +
-        "<button data-home='" + jid + "'>호밍</button> " +
+        (homed[jid] ? T("완료") : T("미완")) + " " +
+        "<button data-home='" + jid + "'>" + T("호밍") + "</button> " +
         "<button data-jogminus='" + jid + "'>-5</button>" +
         "<button data-jogplus='" + jid + "'>+5</button> " +
-        "<input id='goto-" + jid + "' size='5' placeholder='각도'> " +
-        "<button data-goto='" + jid + "'>각도로 이동</button> " +
-        "<button data-mark='" + jid + "'>현재를 0으로</button>" +
+        "<input id='goto-" + jid + "' size='5' placeholder='" + T("각도") + "'> " +
+        "<button data-goto='" + jid + "'>" + T("각도로 이동") + "</button> " +
+        "<button data-mark='" + jid + "'>" + T("현재를 0으로") + "</button>" +
         "<span id='home-msg-" + jid + "'></span></div>";
     }
     box.innerHTML = html;
@@ -3389,9 +4139,9 @@ async function renderHoming() {
         const r = await post("/api/home_joint",
           {joint: b.dataset.home, mark: false});
         if (m) m.textContent = r.ok
-          ? "결과: " + JSON.stringify({offset: r.offset,
+          ? T("결과: ") + JSON.stringify({offset: r.offset,
               method: r.method})
-          : "실패: " + (r.error || "?");
+          : T("실패: ") + (r.error || "?");
         poll();
       };
     });
@@ -3401,8 +4151,8 @@ async function renderHoming() {
         const r = await post("/api/home_joint",
           {joint: b.dataset.mark, mark: true});
         if (m) m.textContent = r.ok
-          ? "0으로 표시됨(offset " + r.offset + ")"
-          : "실패: " + (r.error || "?");
+          ? T("0으로 표시됨(offset ") + r.offset + ")"
+          : T("실패: ") + (r.error || "?");
         poll();
       };
     });
@@ -3413,10 +4163,11 @@ async function renderHoming() {
       const m = document.getElementById("home-msg-" + jid);
       const r = await post("/api/jog", {joint: jid, delta});
       if (m) m.textContent = r.ok
-        ? (r.executed === false ? "미실행: " + (r.warning || "?")
-          : "이동: 요청 " + r.joint_delta + "도, 실이동 " +
-          (r.moved !== undefined ? r.moved.toFixed(1) : "?"))
-        : "실패: " + (r.error || "?");
+        ? (r.executed === false ? T("미실행: ") + (r.warning || "?")
+          : T("이동: 요청 {a}도, 실이동 {b}도",
+            {a: r.joint_delta,
+             b: (r.moved !== undefined ? r.moved.toFixed(1) : "?")}))
+        : T("실패: ") + (r.error || "?");
       poll();
     };
     box.querySelectorAll("[data-jogminus]").forEach((b) => {
@@ -3432,19 +4183,19 @@ async function renderHoming() {
         const v = parseFloat(
           document.getElementById("goto-" + jid).value);
         if (isNaN(v)) {
-          if (m) m.textContent = "각도 입력이 숫자가 아닙니다";
+          if (m) m.textContent = T("각도 입력이 숫자가 아닙니다");
           return;
         }
         const ov = await post("/api/overview", {});
         if (!ov.ok) {
-          if (m) m.textContent = "상태 조회 실패";
+          if (m) m.textContent = T("상태 조회 실패");
           return;
         }
         const q = {};
         for (const j of ov.joints) {
           if (j.joint_deg === null || j.joint_deg === undefined) {
             if (m) m.textContent =
-              "전 관절 각도 필요: " + j.joint + " 읽김";
+              T("전 관절 각도 필요: ") + j.joint + T(" 읽김");
             return;
           }
           q[j.joint] = j.joint_deg;
@@ -3453,34 +4204,34 @@ async function renderHoming() {
         const r = await post("/api/goto",
           {q_deg: q, speed_dps: 15, label: "homing-goto"});
         if (m) m.textContent = r.ok
-          ? "이동 완료, 최대오차 " + r.max_abs_err.toFixed(2) + "도"
-          : "실패(거부): " + (r.error || "?");
-        log("호밍 수동이동 " + jid + "=" + v + ": " +
+          ? T("이동 완료, 최대오차 {x}도", {x: r.max_abs_err.toFixed(2)})
+          : T("실패(거부): ") + (r.error || "?");
+        log(T("호밍 수동이동 ") + jid + "=" + v + ": " +
           (r.ok ? "ok" : r.error));
         poll();
       };
     });
     if (!spec.ok)
-      box.innerHTML += "<div>호밍 명세 실패: " + spec.error + "</div>";
+      box.innerHTML += "<div>" + T("호밍 명세 실패: ") + spec.error + "</div>";
     // One-shot all-zero at the physical reference (ㄱ) pose: every
     // joint reads 0 here, and control starts from this pose.
     const allBtn = document.getElementById("home-all");
     if (allBtn) allBtn.onclick = async () => {
-      if (!confirm("현재 자세를 전 관절의 0으로 기록할까요?")) {
-        log("전부 0으로 취소됨");
+      if (!confirm(T("현재 자세를 전 관절의 0으로 기록할까요?"))) {
+        log(T("전부 0으로 취소됨"));
         return;
       }
       const m = document.getElementById("home-all-msg");
       const r = await post("/api/home_all", {});
       if (m) m.textContent = r.ok
-        ? "전부 0으로 기록됨"
-        : "실패: " + (r.error || "?");
-      log("전부 0으로: " +
+        ? T("전부 0으로 기록됨")
+        : T("실패: ") + (r.error || "?");
+      log(T("전부 0으로: ") +
         (r.ok ? JSON.stringify(r.offsets) : r.error));
       poll();
     };
   } catch (err) {
-    box.innerHTML = "호밍 로드 실패";
+    box.innerHTML = T("호밍 로드 실패");
   }
 }
 async function renderVerify() {
@@ -3489,21 +4240,21 @@ async function renderVerify() {
     const r = await post("/api/verify_report", {});
     if (!r.ok) {
       document.getElementById("verify-table").textContent =
-        "보고서 로드 실패: " + r.error;
+        T("보고서 로드 실패: ") + r.error;
       return;
     }
     const rep = r.report || null;
     if (!rep) {
       document.getElementById("verify-table").textContent =
-        "아직 검증 보고서가 없습니다(시뮬레이션 산출 후 표시)";
+        T("아직 검증 보고서가 없습니다(시뮬레이션 산출 후 표시)");
       return;
     }
     // Report shape: runs/stage5c/ik_check_multi/report.json
     // {targets: [{id, kind, tcp_err_mm, dq, base_moved,
     // at_limit, pass, reason}], pass_reachable, pass_unreachable}.
-    let html = "<table><tr><th>목표</th><th>종류</th>" +
-      "<th>TCP 오차mm</th><th>밑동 관절</th><th>통과</th>" +
-      "<th>사유</th></tr>";
+    let html = "<table><tr><th>" + T("목표") + "</th><th>" + T("종류") + "</th>" +
+      "<th>" + T("TCP 오차mm") + "</th><th>" + T("밑동 관절") + "</th><th>" + T("통과") + "</th>" +
+      "<th>" + T("사유") + "</th></tr>";
     for (const t of (rep.targets || [])) {
       const dq = (t.dq || []).map((v) => (+v).toFixed(1)).join(",");
       html += "<tr><td>" + t.id + "</td><td>" + (t.kind || "") +
@@ -3512,25 +4263,25 @@ async function renderVerify() {
         "</td><td>" + (t.pass ? "PASS" : "FAIL") + "</td><td>" +
         (t.reason || "") + "</td></tr>";
     }
-    html += "</table><div>닿는 목표 통과 " +
-      JSON.stringify(rep.pass_reachable) + " / 닿지 않는 목표 " +
+    html += "</table><div>" + T("닿는 목표 통과 ") +
+      JSON.stringify(rep.pass_reachable) + T(" / 닿지 않는 목표 ") +
       JSON.stringify(rep.pass_unreachable) + "</div>";
     if (rep.images && rep.images.length) {
-      html += "<div>증거: " + rep.images.map((im) =>
+      html += "<div>" + T("증거: ") + rep.images.map((im) =>
         "<a href='" + im.url + "'>" + im.name + "</a>").join(" ") + "</div>";
     }
     try {
       const g = await post("/api/gt_frames",
         {q_deg: {J1: 0, J2: 0, J3: 0, J4: 0, J5: 0, J6: 0}});
-      html += "<div>GT 뼈대: " + (g.ok
-        ? "사용 가능 — 메인 3D의 GT 표시로 겹쳐 비교하세요"
-        : "비공개(--private-visuals 필요)") + "</div>";
+      html += "<div>" + T("GT 뼈대: ") + (g.ok
+        ? T("사용 가능 — 메인 3D의 GT 표시로 겹쳐 비교하세요")
+        : T("비공개(--private-visuals 필요)")) + "</div>";
     } catch (err) {
-      html += "<div>GT 뼈대: 확인 실패</div>";
+      html += "<div>" + T("GT 뼈대: 확인 실패") + "</div>";
     }
     document.getElementById("verify-table").innerHTML = html;
   } catch (err) {
-    document.getElementById("verify-table").textContent = "로드 실패";
+    document.getElementById("verify-table").textContent = T("로드 실패");
   }
 }
 // ---- Digital twin (main page) ----
@@ -3539,12 +4290,12 @@ async function initTwin() {
   if (!document.getElementById("twin-slots")) return;
   const r = await post("/api/twin/slots", {});
   const box = document.getElementById("twin-slots");
-  if (!r.ok) { box.textContent = "로드 실패: " + r.error; return; }
+  if (!r.ok) { box.textContent = T("로드 실패: ") + r.error; return; }
   TWIN.ids = r.ids; TWIN.colours = r.colours; TWIN.slots = r.slots || {};
   let html = "<table><tr>";
   for (const sid of TWIN.ids) {
     html += "<td>" + sid + "<br><select data-slot='" + sid + "'>" +
-      "<option value=''>없음</option>" + TWIN.colours.map((c) =>
+      "<option value=''>" + T("없음") + "</option>" + TWIN.colours.map((c) =>
         "<option value='" + c + "'" +
         (TWIN.slots[sid] === c ? " selected" : "") + ">" + c +
         "</option>").join("") + "</select></td>";
@@ -3557,17 +4308,148 @@ async function initTwin() {
     const rr = await post("/api/twin/slots/set",
       {slots: readTwinSlots()});
     document.getElementById("twin-msg").textContent =
-      rr.ok ? "색 저장됨" : "저장 실패: " + rr.error;
+      rr.ok ? T("색 저장됨") : T("저장 실패: ") + rr.error;
   };
   document.getElementById("twin-run").onclick = runTwin;
   document.getElementById("twin-send").onclick = sendTwin;
   document.getElementById("twin-rest").onclick = async () => {
-    if (!confirm("휴식 자세로 저속 이동할까요?")) return;
+    if (!confirm(T("휴식 자세로 저속 이동할까요?"))) return;
     const rr = await post("/api/twin/rest", {});
     document.getElementById("twin-msg").textContent =
-      rr.ok ? "휴식 자세 이동 완료" : "실패: " + rr.error;
-    log("트윈 휴식: " + (rr.ok ? "ok" : rr.error));
+      rr.ok ? T("휴식 자세 이동 완료") : T("실패: ") + rr.error;
+    log(T("트윈 휴식: ") + (rr.ok ? "ok" : rr.error));
   };
+}
+const VLA = {fakeIdx: 0, trial: null, hold: null};
+function vlaCamText(c) {
+  const d = c.dev || {};
+  const st = d.open ?
+    T("연결됨 ") + d.width + "x" + d.height +
+      (d.fps ? " @" + d.fps + "fps" : "") +
+      (d.backend ? " [" + d.backend + "]" : "") :
+    T("끊김: ") + (d.error || T("알 수 없음"));
+  return T("번호 {n} / {s} / 가짜 {m}장",
+    {n: c.camera, s: st, m: c.fake.length});
+}
+async function refreshVlaCam() {
+  const info = document.getElementById("vla-caminfo");
+  const c = await post("/api/vla/camera", {});
+  if (!c.ok) {
+    info.textContent = T("카메라 정보 실패: ") + c.error;
+    return;
+  }
+  info.textContent = vlaCamText(c);
+  VLA.fakes = c.fake;
+}
+async function initVla() {
+  if (!document.getElementById("vla-run")) return;
+  await refreshVlaCam();
+  document.getElementById("vla-run").onclick = runVla;
+  document.getElementById("vla-send").onclick = sendVla;
+  document.getElementById("vla-rest").onclick = async () => {
+    if (!confirm(T("휴식 자세로 저속 이동할까요?"))) return;
+    const rr = await post("/api/twin/rest", {});
+    document.getElementById("vla-msg").textContent =
+      rr.ok ? T("휴식 자세 이동 완료") : T("실패: ") + rr.error;
+    log(T("VLA 휴식: ") + (rr.ok ? "ok" : rr.error));
+  };
+  document.getElementById("vla-yes").onclick = () => voteVla(true);
+  document.getElementById("vla-no").onclick = () => voteVla(false);
+}
+async function runVla() {
+  const msg = document.getElementById("vla-msg");
+  const source = document.getElementById("vla-source").value;
+  const target = document.getElementById("vla-target").value;
+  const task = document.getElementById("vla-task").value;
+  const ckpt = document.getElementById("vla-ckpt").value;
+  msg.textContent = T("추론 중…");
+  const r = await post("/api/vla/infer",
+    {source, target, task, ckpt,
+     fake_index: source === "fake" ? (VLA.fakeIdx++) : 0});
+  if (!r.ok) {
+    msg.textContent = T("실패: ") + r.error;
+    log(T("VLA 추론 실패: ") + r.error);
+    await refreshVlaCam();
+    return;
+  }
+  const img = document.getElementById("vla-img");
+  img.src = "data:image/png;base64," + r.png;
+  img.style.display = "";
+  document.getElementById("vla-info").textContent =
+    r.task + " → " + r.slot + " (" + r.dist_mm + "mm) " +
+    r.infer_s + T("초 ") + r.origin + " [" + r.ckpt + "]";
+  msg.textContent = T("추론 완료");
+  log(T("VLA 추론: ") + r.slot + " " + r.infer_s + T("초 ") + r.origin);
+  await refreshVlaCam();
+  // 3D translucent preview via the shared ghost path.
+  VLA.hold = r.hold_q;
+  const sol = {};
+  for (const j of MODEL.joints) sol[j.id] = r.hold_q[j.id];
+  const pv = await post("/api/preview", {q_deg: sol});
+  previewRange = (pv && pv.ok && pv.range) || "";
+  if (isConnected()) {
+    pendingQ = sol; previewOk = !!(pv && pv.ok);
+    ghostOn = true; applyGhost();
+  } else {
+    for (const j of MODEL.joints) qdeg[j.id] = sol[j.id];
+    pendingQ = null; previewOk = false; previewRange = "";
+    ghostOn = false; applyGhost();
+  }
+  document.getElementById("vla-send").disabled = !!sendBlockReason();
+  const sv = await post("/api/vla/trial/save",
+    {instruction: r.task, ckpt: r.ckpt});
+  if (sv.ok) {
+    VLA.trial = sv.id;
+    document.getElementById("vla-trial").textContent = sv.id;
+    document.getElementById("vla-yes").disabled = false;
+    document.getElementById("vla-no").disabled = false;
+  }
+}
+async function sendVla() {
+  if (!VLA.hold) return;
+  if (!isConnected()) {
+    alert(T("브릭이 연결되지 않아 보낼 수 없습니다"));
+    return;
+  }
+  const uh = unhomedJoints();
+  if (uh.length &&
+      !confirm(T("호밍 안 됨(") + uh.join(",") +
+               T("): 그래도 VLA 자세를 보내시겠습니까?"))) return;
+  let mx = 0;
+  for (const id of Object.keys(VLA.hold))
+    mx = Math.max(mx, Math.abs((VLA.hold[id] || 0) -
+                               (qdeg[id] || 0)));
+  if (mx > 45 &&
+      !confirm(T("이동량 ") + mx.toFixed(0) + T("°: 저속으로 이동할까요?")))
+    return;
+  pendingQ = Object.assign({}, VLA.hold);
+  const reason = sendBlockReason();
+  if (reason) {
+    alert(T("보내기 거부: ") + reason);
+    return;
+  }
+  const r = await post("/api/goto",
+    {q_deg: pendingQ, speed_dps: 15, label: "vla-send"});
+  if (!r.ok) {
+    alert(T("로봇으로 보내기 실패: ") + r.error);
+    log(T("VLA 보내기 실패: ") + r.error);
+    return;
+  }
+  for (const j of MODEL.joints) qdeg[j.id] = pendingQ[j.id];
+  document.getElementById("follow-live").checked = false;
+  pendingQ = null; previewOk = false; previewRange = "";
+  ghostOn = false; applyGhost();
+  document.getElementById("vla-send").disabled = true;
+  refreshSend(); snapGizmoToTCP(); refreshPoses();
+  log(T("VLA 보내기 완료"));
+}
+async function voteVla(correct) {
+  if (!VLA.trial) return;
+  const r = await post("/api/vla/trial/vote",
+    {id: VLA.trial, correct});
+  document.getElementById("vla-trial").textContent =
+    VLA.trial + (r.ok ? (correct ? T(" 맞음") : T(" 틀림")) : T(" 저장 실패"));
+  log(T("VLA 판정: ") + VLA.trial + " " + (correct ? T("맞음") : T("틀림")));
 }
 function readTwinSlots() {
   const out = {};
@@ -3578,22 +4460,22 @@ function readTwinSlots() {
 }
 async function runTwin() {
   const msg = document.getElementById("twin-msg");
-  msg.textContent = "가상 이미지 생성+VLA 추론 중…";
+  msg.textContent = T("가상 이미지 생성+VLA 추론 중…");
   const r = await post("/api/twin/run",
     {slots: readTwinSlots(),
      target: document.getElementById("twin-target").value});
-  if (!r.ok) { msg.textContent = "실패: " + r.error; return; }
+  if (!r.ok) { msg.textContent = T("실패: ") + r.error; return; }
   TWIN.holdQ = r.hold_q;
   const img = document.getElementById("twin-img");
   img.src = "data:image/png;base64," + r.png;
   img.style.display = "";
-  msg.textContent = "정책=" + r.policy + " 목표=" + r.target +
-    " 유지=" + JSON.stringify(r.hold_q) + " " + JSON.stringify(r.rec);
+  msg.textContent = T("정책=") + r.policy + T(" 목표=") + r.target +
+    T(" 유지=") + JSON.stringify(r.hold_q) + " " + JSON.stringify(r.rec);
   document.getElementById("twin-send").disabled = false;
   TWIN.armSend = 0;
   document.getElementById("twin-send").textContent =
-    "유지 자세로 보내기 (저속)";
-  log("트윈 실행: 정책=" + r.policy + " 목표=" + r.target);
+    T("유지 자세로 보내기 (저속)");
+  log(T("트윈 실행: 정책=") + r.policy + T(" 목표=") + r.target);
 }
 async function sendTwin() {
   // Inline two-step confirm: native confirm() can be permanently
@@ -3601,37 +4483,37 @@ async function sendTwin() {
   const msg = document.getElementById("twin-msg");
   const btn = document.getElementById("twin-send");
   if (!TWIN.holdQ) {
-    if (msg) msg.textContent = "유지 자세 없음(트윈 실행 먼저)";
+    if (msg) msg.textContent = T("유지 자세 없음(트윈 실행 먼저)");
     return;
   }
   const now = Date.now();
   if (!TWIN.armSend || now - TWIN.armSend > 10000) {
     TWIN.armSend = now;
-    if (msg) msg.textContent = "다시 누르면 저속(15도/s)으로 전송";
-    if (btn) btn.textContent = "확인: 유지 자세로 보내기";
-    log("트윈 전송 대기(다시 누르면 전송)");
+    if (msg) msg.textContent = T("다시 누르면 저속(15도/s)으로 전송");
+    if (btn) btn.textContent = T("확인: ") + T("유지 자세로 보내기");
+    log(T("트윈 전송 대기(다시 누르면 전송)"));
     return;
   }
   TWIN.armSend = 0;
-  if (btn) btn.textContent = "유지 자세로 보내기 (저속)";
+  if (btn) btn.textContent = T("유지 자세로 보내기 (저속)");
   const r = await post("/api/goto",
     {q_deg: TWIN.holdQ, speed_dps: 15, label: "twin-hold"});
   if (msg) msg.textContent =
-    r.ok ? "유지 자세 이동 완료, 최대오차 " +
-      r.max_abs_err.toFixed(2) + "°" : "실패(거부): " + r.error;
-  log("트윈 전송: " + (r.ok ? "ok" : r.error));
+    r.ok ? T("유지 자세 이동 완료, 최대오차 ") +
+      r.max_abs_err.toFixed(2) + "°" : T("실패(거부): ") + r.error;
+  log(T("트윈 전송: ") + (r.ok ? "ok" : r.error));
 }
 // ---- Session calibration (cal page) ----
 async function refreshSess() {
   const box = document.getElementById("sess-stat");
   if (!box) return;
   const r = await post("/api/calib/session", {});
-  if (!r.ok) { box.textContent = "로드 실패: " + r.error; return; }
-  box.innerHTML = "연속성=" + r.continuity +
-    " 확정=" + (r.confirmed ? ("됨(" + r.confirmed_at + ")") : "안됨") +
-    " 저장=" + (r.saved_at || "없음") +
-    "<br>현재 가동=" + JSON.stringify(r.boot_now) +
-    "<br>저장 가동=" + JSON.stringify(r.boot_saved);
+  if (!r.ok) { box.textContent = T("로드 실패: ") + r.error; return; }
+  box.innerHTML = T("연속성=") + r.continuity +
+    T(" 확정=") + (r.confirmed ? (T("됨(") + r.confirmed_at + ")") : T("안됨")) +
+    T(" 저장=") + (r.saved_at || T("없음")) +
+    "<br>" + T("현재 가동=") + JSON.stringify(r.boot_now) +
+    "<br>" + T("저장 가동=") + JSON.stringify(r.boot_saved);
 }
 function initSess() {
   if (!document.getElementById("sess-flow")) return;
@@ -3640,7 +4522,7 @@ function initSess() {
     document.getElementById("sess-msg").textContent = t;
   };
   document.getElementById("sess-flow").onclick = async () => {
-    if (!confirm("한 번에 보정: J1~J4 센서 호밍 → 손목 → 확인자세. 진행할까요?"))
+    if (!confirm(T("한 번에 보정: J1~J4 센서 호밍 → 손목 → 확인자세. 진행할까요?")))
       return;
     const r = await post("/api/calib/flow", {});
     const steps = (r.ok && r.steps ? r.steps : [])
@@ -3648,33 +4530,33 @@ function initSess() {
         (s.max_abs_deg !== undefined ? "(" + s.max_abs_deg + "°)" : "") +
         (s.note ? " " + s.note : "")).join(" / ");
     document.getElementById("flow-steps").textContent = steps;
-    msg(r.ok ? ("흐름=" + r.flow) : ("실패: " + r.error));
+    msg(r.ok ? (T("흐름=") + r.flow) : (T("실패: ") + r.error));
     if (r.ok && r.flow === "done")
-      msg("확인 자세로 이동됨. 3D 실측겹침을 보고 '맞음'을 누르세요.");
+      msg(T("확인 자세로 이동됨. 3D 실측겹침을 보고 '맞음'을 누르세요."));
     poll();
   };
   document.getElementById("sess-park").onclick = async () => {
-    if (!confirm("주차: 휴식 자세로 저속 이동 후 세션 저장. 진행할까요?"))
+    if (!confirm(T("주차: 휴식 자세로 저속 이동 후 세션 저장. 진행할까요?")))
       return;
     const r = await post("/api/calib/park", {});
-    msg(r.ok ? "주차 저장됨(" + r.saved_at + ")" : "실패: " + r.error);
+    msg(r.ok ? T("주차 저장됨(") + r.saved_at + ")" : T("실패: ") + r.error);
     refreshSess(); poll();
   };
   document.getElementById("sess-restore").onclick = async () => {
     const r = await post("/api/calib/restore", {});
-    msg(r.ok ? "복원됨(연속성=" + r.continuity + ")" : "실패: " + r.error);
+    msg(r.ok ? T("복원됨(연속성=") + r.continuity + ")" : T("실패: ") + r.error);
     poll();
   };
   document.getElementById("sess-check").onclick = async () => {
     const r = await post("/api/calib/check", {});
-    msg(r.ok ? ("확인 자세 이동, 최대편차 " +
-      r.deviation.max_abs_deg + "°") : ("실패: " + r.error));
+    msg(r.ok ? (T("확인 자세 이동, 최대편차 ") +
+      r.deviation.max_abs_deg + "°") : (T("실패: ") + r.error));
     poll();
   };
   document.getElementById("sess-ok").onclick = async () => {
     const r = await post("/api/calib/confirm", {});
-    msg(r.ok ? ("보정 확정됨(" + r.confirmed_at + ")")
-             : ("확정 불가: " + r.error));
+    msg(r.ok ? (T("보정 확정됨(") + r.confirmed_at + ")")
+             : (T("확정 불가: ") + r.error));
     refreshSess();
   };
 }
@@ -3683,7 +4565,12 @@ function initSess() {
 const __realById = document.getElementById.bind(document);
 document.getElementById = (id) =>
   __realById(id) || document.createElement("div");
+document.getElementById("langbtn").onclick = () => {
+  LANG = LANG === "en" ? "ko" : "en";
+  applyLang();
+};
 initModel().then(() => {
+  applyLang();
   initRobot();
   // Show only this page's sections (log section has no data-sec
   // and stays visible everywhere).
@@ -3694,7 +4581,7 @@ initModel().then(() => {
   if (pg === "main") {
     poll(); setInterval(poll, 2000);
     refreshRanges(); refreshPoses(); refreshConfig();
-    refreshVisual(); loadMat(); initTwin();
+    refreshVisual(); loadMat(); initTwin(); initVla();
     fitLayout();
   } else {
     poll(); setInterval(poll, 3000);

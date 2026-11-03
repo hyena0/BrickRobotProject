@@ -1,5 +1,5 @@
 #!/usr/bin/env pybricks-micropython
-# brick-sw-version: 5B.17
+# brick-sw-version: 5B.18
 """Right brick program for Pybricks MicroPython (slave).
 
 Mailbox client of the left brick. Runs relayed commands through the
@@ -25,10 +25,10 @@ except ImportError:
     import json
 
 TICK_MS = 10
-STATE_MS = 200
+STATE_MS = 66
 MASTER_LINK_MS = 3000
 CONFIG_PATH = "config/brick.local.json"
-MASTER_BT_DEFAULT = "ev3dev"
+MASTER_BT_NAME = "ev3dev"
 DEFAULT_CONFIG = {
     "brick": "right",
     "motors": [{"port": "outA", "type": "medium"},
@@ -71,7 +71,6 @@ class SlaveRuntime:
                                     "detail": evt.detail})
             self.core.pending_events = []
         self._watchdogs()
-        self.core.poll_port_retries(clock.now_ms(), _reopen)
         self._send_state()
         self._send_async()
 
@@ -238,55 +237,35 @@ class SlaveRuntime:
             return None
 
 
-def _reopen(port, kind, mtype, threshold=None):
-    if kind == "motor":
-        return motors.open_motor(port, mtype)
-    return sensors.open_sensor(port, mtype, threshold)
-
-
 def build_core(cfg):
     mot = {}
     mtypes = {}
-    hmodes = {}
     missing = []
-    errs = []
     for m in cfg["motors"]:
-        port = m["port"]
-        mtype = m.get("type", "medium")
-        hmodes[port] = m.get("hold", "hold")
         try:
-            dev = motors.open_motor(port, mtype)
-        except OSError as exc:
-            missing.append(port)
-            errs.append((port, "motor", mtype, exc, None))
+            dev = motors.open_motor(m["port"], m.get("type", "medium"))
+        except OSError:
+            missing.append(m["port"])
         else:
-            mot[port] = dev
-            mtypes[port] = mtype
+            mot[m["port"]] = dev
+            mtypes[m["port"]] = m.get("type", "medium")
     sen = {}
     stypes = {}
     for s in cfg["sensors"]:
-        port = s["port"]
-        stype = s.get("type", "touch")
-        threshold = s.get("threshold")
         try:
-            dev = sensors.open_sensor(port, stype, threshold)
-        except OSError as exc:
-            missing.append(port)
-            errs.append((port, "sensor", stype, exc,
-                         threshold))
+            dev = sensors.open_sensor(s["port"], s.get("type", "touch"))
+        except OSError:
+            missing.append(s["port"])
         else:
-            sen[port] = dev
-            stypes[port] = stype
+            sen[s["port"]] = dev
+            stypes[s["port"]] = s.get("type", "touch")
     log.log("right: motors " + " ".join(sorted(mot))
             + "; sensors " + " ".join(sorted(sen)))
     if missing:
         log.log("right: NOT CONNECTED: " + " ".join(sorted(missing))
                 + " (check cables)")
-    bk = core.BrickCore("right", mot, sen, mtypes, stypes,
-                         hmodes)
+    bk = core.BrickCore("right", mot, sen, mtypes, stypes)
     bk.missing = missing
-    for port, kind, mtype, exc, threshold in errs:
-        bk.note_port_error(port, kind, mtype, exc, threshold)
     return bk
 
 
@@ -304,13 +283,7 @@ def main():
     mbox = None
     while mbox is None:
         try:
-            bt_name = cfg.get("master_bt") \
-                or MASTER_BT_DEFAULT
-            if not cfg.get("master_bt"):
-                log.log("WARNING: master_bt not set, using "
-                        "default 'ev3dev'; set master_bt "
-                        "in brick_right.json")
-            mbox = link.open_slave_link(bt_name)
+            mbox = link.open_slave_link(MASTER_BT_NAME)
         except Exception:
             clock.sleep_s(2)
     print("right: mailbox link up, entering main loop")
@@ -322,7 +295,7 @@ def main():
         now = clock.now_ms()
         if clock.diff_ms(now, last_disp) >= 1000:
             last_disp = now
-            display.show(display.render_slave(rt, bt_name))
+            display.show(display.render_slave(rt, MASTER_BT_NAME))
         clock.sleep_ms(TICK_MS)
 
 
