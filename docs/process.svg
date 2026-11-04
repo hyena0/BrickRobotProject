@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="840" font-family="system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#555"/>
+    </marker>
+    <style>
+      .t { font-size: 19px; font-weight: bold; fill: #1a1a1a; }
+      .s { font-size: 13.5px; fill: #444; }
+      .row { font-size: 15px; font-weight: bold; }
+      .lab { font-size: 14px; fill: #333; paint-order: stroke; stroke: #FAFAF8; stroke-width: 4px; }
+      .note { font-size: 14px; fill: #333; }
+    </style>
+  </defs>
+  <rect width="1400" height="840" fill="#FAFAF8"/>
+
+  <text x="40" y="52" font-size="30" font-weight="bold" fill="#111">BrickRobotProject 개발 과정</text>
+  <text x="40" y="78" font-size="15" fill="#555">Stage 0–9 · 추론 → 실기 → VLA → 검증 · 단일 파일 콘솔 · 이중 안전 · 가짜 기본값</text>
+
+  <!-- Row A -->
+  <text x="40" y="118" class="row" fill="#5B7A99">추론 파이프라인</text>
+  <g id="rowA">
+    <g><rect x="40" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="137" y="168" text-anchor="middle" class="t">Studio .io</text><text x="137" y="194" text-anchor="middle" class="s">부품 ID · 자세만</text></g>
+    <g><rect x="255" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="352" y="168" text-anchor="middle" class="t">S0·1 데이터·도구</text><text x="352" y="194" text-anchor="middle" class="s">LDraw 파서 · 카탈로그</text></g>
+    <g><rect x="470" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="567" y="168" text-anchor="middle" class="t">S2 링크·관절 추론</text><text x="567" y="194" text-anchor="middle" class="s">분할 · 축 · 기어비</text></g>
+    <g><rect x="685" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="782" y="168" text-anchor="middle" class="t">S3 기어·커플링</text><text x="782" y="194" text-anchor="middle" class="s">치열 합성 · 예외 규칙</text></g>
+    <g><rect x="900" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="997" y="168" text-anchor="middle" class="t">S4 FK·IK·MJCF</text><text x="997" y="194" text-anchor="middle" class="s">GT 중앙값 0.45mm</text></g>
+    <g><rect x="1115" y="130" width="195" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="1212" y="168" text-anchor="middle" class="t">robot_inferred</text><text x="1212" y="194" text-anchor="middle" class="s">.json · .xml</text></g>
+  </g>
+  <g stroke="#555" stroke-width="2">
+    <line x1="233" y1="178" x2="257" y2="178" marker-end="url(#arr)"/>
+    <line x1="448" y1="178" x2="472" y2="178" marker-end="url(#arr)"/>
+    <line x1="663" y1="178" x2="687" y2="178" marker-end="url(#arr)"/>
+    <line x1="878" y1="178" x2="902" y2="178" marker-end="url(#arr)"/>
+    <line x1="1093" y1="178" x2="1117" y2="178" marker-end="url(#arr)"/>
+  </g>
+
+  <!-- Row B -->
+  <text x="40" y="288" class="row" fill="#4E7A4E">실기 · VLA 파이프라인</text>
+  <g id="rowB">
+    <g><rect x="40" y="300" width="195" height="96" rx="10" fill="#E9F1E9" stroke="#8FB894" stroke-width="2"/><text x="137" y="338" text-anchor="middle" class="t">S5 실기 패키지</text><text x="137" y="364" text-anchor="middle" class="s">호밍 · 한계 · 포즈 재생</text></g>
+    <g><rect x="255" y="300" width="195" height="96" rx="10" fill="#E9F1E9" stroke="#8FB894" stroke-width="2"/><text x="352" y="338" text-anchor="middle" class="t">S5B 하드웨어 연결</text><text x="352" y="364" text-anchor="middle" class="s">MQTT · BT · 5B.18</text></g>
+    <g><rect x="470" y="300" width="195" height="96" rx="10" fill="#E9F1E9" stroke="#8FB894" stroke-width="2"/><text x="567" y="338" text-anchor="middle" class="t">S5C 웹 콘솔</text><text x="567" y="364" text-anchor="middle" class="s">3D · IK · 보정 · 한영</text></g>
+    <g><rect x="685" y="300" width="195" height="96" rx="10" fill="#FBF0DC" stroke="#D9B36A" stroke-width="2"/><text x="782" y="338" text-anchor="middle" class="t">S6 Sim-VLA</text><text x="782" y="364" text-anchor="middle" class="s">데모 400 · 6k 스텝</text></g>
+    <g><rect x="900" y="300" width="195" height="96" rx="10" fill="#FBF0DC" stroke="#D9B36A" stroke-width="2"/><text x="997" y="338" text-anchor="middle" class="t">S9 실사·미세조정</text><text x="997" y="364" text-anchor="middle" class="s">15/15 @4.1mm · ft9b</text></g>
+    <g><rect x="1115" y="300" width="195" height="96" rx="10" fill="#EDEDED" stroke="#B0B0B0" stroke-width="2"/><text x="1212" y="338" text-anchor="middle" class="t">S8 출하</text><text x="1212" y="364" text-anchor="middle" class="s">가드 · 비공개 분리</text></g>
+  </g>
+  <g stroke="#555" stroke-width="2">
+    <line x1="233" y1="348" x2="257" y2="348" marker-end="url(#arr)"/>
+    <line x1="448" y1="348" x2="472" y2="348" marker-end="url(#arr)"/>
+    <line x1="663" y1="348" x2="687" y2="348" marker-end="url(#arr)"/>
+    <line x1="878" y1="348" x2="902" y2="348" marker-end="url(#arr)"/>
+    <line x1="1093" y1="348" x2="1117" y2="348" marker-end="url(#arr)"/>
+  </g>
+
+  <!-- Cross links -->
+  <g stroke="#555" stroke-width="2">
+    <line x1="782" y1="226" x2="150" y2="300" marker-end="url(#arr)"/>
+    <line x1="1212" y1="226" x2="860" y2="300" marker-end="url(#arr)"/>
+  </g>
+  <text x="430" y="272" text-anchor="middle" class="lab">IK · 패키지 → 실기</text>
+  <text x="1050" y="272" text-anchor="middle" class="lab">가상 데모 생성</text>
+
+  <!-- Row C -->
+  <text x="40" y="458" class="row" fill="#666">일반화 · 검증 · 다음</text>
+  <g id="rowC">
+    <g><rect x="40" y="470" width="300" height="96" rx="10" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="2"/><text x="190" y="508" text-anchor="middle" class="t">S7 일반화</text><text x="190" y="534" text-anchor="middle" class="s">T-Bot 가상 전용 · 파이프라인 재사용</text></g>
+    <g><rect x="360" y="470" width="420" height="96" rx="10" fill="#EDEDED" stroke="#B0B0B0" stroke-width="2"/><text x="570" y="508" text-anchor="middle" class="t">검증 체계</text><text x="570" y="534" text-anchor="middle" class="s">pytest 455 · 스모크 6/6 · 게이트 · 브라우저 실측</text></g>
+    <g><rect x="800" y="470" width="510" height="96" rx="10" fill="#FFFFFF" stroke="#888" stroke-width="2" stroke-dasharray="8 5"/><text x="1055" y="508" text-anchor="middle" class="t">다음 과제</text><text x="1055" y="534" text-anchor="middle" class="s">조명 일반화 · 포트 드롭 · 색 구분</text></g>
+  </g>
+
+  <!-- Notes -->
+  <text x="40" y="630" class="note">안전: 미리보기 → 범위 검사 → 사람 확인 → 저속 15°/s · 브릭 자체 가드 · 래치 · 워치독</text>
+  <text x="40" y="656" class="note">비공개: 실측 사진 · LDraw 원본은 runs/ · assets/private/ 에만, git · Modal 업로드 차단</text>
+  <text x="40" y="682" class="note">평가: 가상 100 · 실사 15 · 조명변경 14 · 무작위 기준선, 전/후 비교 + 해시 누출 검증</text>
+
+  <!-- Legend -->
+  <g font-size="14" fill="#333">
+    <rect x="40" y="712" width="22" height="16" rx="4" fill="#E7EDF3" stroke="#9FB3C8" stroke-width="1.5"/><text x="70" y="725">추론</text>
+    <rect x="140" y="712" width="22" height="16" rx="4" fill="#E9F1E9" stroke="#8FB894" stroke-width="1.5"/><text x="170" y="725">실기 · 연결</text>
+    <rect x="280" y="712" width="22" height="16" rx="4" fill="#FBF0DC" stroke="#D9B36A" stroke-width="1.5"/><text x="310" y="725">VLA · 미세조정</text>
+    <rect x="440" y="712" width="22" height="16" rx="4" fill="#EDEDED" stroke="#B0B0B0" stroke-width="1.5"/><text x="470" y="725">출하 · 검증</text>
+  </g>
+
+  <text x="40" y="795" font-size="13" fill="#777">docs/DESIGN.md · docs/stage/ · runs/ git 제외 · 커밋에 사진 없음</text>
+</svg>

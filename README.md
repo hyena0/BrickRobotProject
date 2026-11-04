@@ -1,7 +1,9 @@
-# BrickRobotProject
+# Just Bricks
 
-**From LEGO bricks to a pointing robot: infer the kinematics, drive two EV3
+**Letting Meta AI figure out how a robot moves: infer the kinematics, drive two EV3
 bricks, and teach a vision-language policy to point at blocks.**
+
+![Just Bricks — robot arm, inferred skeleton, and VLA](docs/thumbnail_youtube.png)
 
 Given only a brick-level LEGO assembly (part IDs and poses — no joints, no
 rig, no kinematics), this project geometrically infers the robot's kinematic
