@@ -5,6 +5,8 @@ bricks, and teach a vision-language policy to point at blocks.**
 
 ![Just Bricks — robot arm, inferred skeleton, and VLA](docs/thumbnail_youtube.png)
 
+**Demo video:** [Just Bricks on YouTube](https://youtu.be/9nLjkKq9cKk)
+
 Given only a brick-level LEGO assembly (part IDs and poses — no joints, no
 rig, no kinematics), this project geometrically infers the robot's kinematic
 chain, generates FK/IK and an executable EV3 control program, drives the
