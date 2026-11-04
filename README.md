@@ -3,7 +3,7 @@
 **Letting Meta AI figure out how a robot moves: infer the kinematics, drive two EV3
 bricks, and teach a vision-language policy to point at blocks.**
 
-![Just Bricks — robot arm, inferred skeleton, and VLA](docs/thumbnail_youtube.png)
+[![Just Bricks — robot arm, inferred skeleton, and VLA](docs/thumbnail_youtube.png)](https://youtu.be/9nLjkKq9cKk)
 
 **Demo video:** [Just Bricks on YouTube](https://youtu.be/9nLjkKq9cKk)
 
